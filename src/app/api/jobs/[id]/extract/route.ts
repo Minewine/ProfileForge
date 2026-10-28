@@ -23,7 +23,10 @@ export async function POST(_req: Request, { params }: Params) {
         runId: `extract-${id}-${Date.now()}`,
       });
 
-      const stored = await storeExtractedRequirements(user.id, id, result.data.requirements);
+      const stored = await storeExtractedRequirements(user.id, id, result.data.requirements, {
+        role: result.data.role ?? null,
+        company: result.data.company ?? null,
+      });
       return NextResponse.json({
         status: "extracted",
         requirements: stored.requirements,

@@ -72,12 +72,28 @@ describe("jobs repository", () => {
   it("walks the state machine: created → extracted → finalized → matched, with failed retry", async () => {
     const { analysis } = await createAnalysis(user.id, JD);
 
-    const stored = await storeExtractedRequirements(user.id, analysis.id, [
-      { text: "Kubernetes", category: "tool", importance: "must", isHardConstraint: true },
-      { text: "Kafka", category: "tool", importance: "nice", isHardConstraint: false },
-    ]);
+    const stored = await storeExtractedRequirements(
+      user.id,
+      analysis.id,
+      [
+        { text: "Kubernetes", category: "tool", importance: "must", isHardConstraint: true },
+        { text: "Kafka", category: "tool", importance: "nice", isHardConstraint: false },
+      ],
+      { role: "Senior Backend Engineer", company: "Acme" },
+    );
     expect(stored.replacedRequirements).toBe(false);
-    expect((await getAnalysis(user.id, analysis.id)).status).toBe("extracted");
+    const extractedAnalysis = await getAnalysis(user.id, analysis.id);
+    expect(extractedAnalysis.status).toBe("extracted");
+    expect(extractedAnalysis.jdRole).toBe("Senior Backend Engineer"); // draft-prompt inputs
+    expect(extractedAnalysis.jdCompany).toBe("Acme");
+
+    // re-extraction without extras leaves the previous role/company in place
+    await storeExtractedRequirements(user.id, analysis.id, [
+      { text: "Go", category: "skill", importance: "must", isHardConstraint: false },
+    ]);
+    const kept = await getAnalysis(user.id, analysis.id);
+    expect(kept.jdRole).toBe("Senior Backend Engineer");
+    expect(kept.jdCompany).toBe("Acme");
 
     // re-extraction replaces the list
     const again = await storeExtractedRequirements(user.id, analysis.id, [

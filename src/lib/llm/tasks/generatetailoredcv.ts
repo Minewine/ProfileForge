@@ -21,7 +21,7 @@ export const GenerateTailoredCVInputSchema = z.object({
   summarySources: z.array(z.string()),
   summaryRequirements: z.array(z.string()).max(5), // JD must-haves the summary connects evidence to (US3; may be empty)
   summaryMaxWords: z.number().int().min(30).max(120), // user-facing length bound (US3)
-  jdDigest: z.object({ role: z.string().optional(), keywords: z.array(z.string()) }),
+  jdDigest: z.object({ role: z.string().optional(), company: z.string().optional(), keywords: z.array(z.string()) }),
   /** Capped raw job-description text — the primary wording target. */
   jobDescription: z.string().min(1).optional(),
   pageBudget: z.number().int().min(1).max(3),
@@ -87,7 +87,9 @@ export function ensureGenerateTailoredCVRegistered() {
         input.summarySources.length > 0 ? input.summarySources.map((s) => `- ${s}`).join("\n") : "- (none)",
         "",
         `Skills (deterministic — echo verbatim, never extend): ${input.skills.join(", ") || "(none)"}`,
-        `JD digest: ${input.jdDigest.role ? `role: ${input.jdDigest.role}; ` : ""}keywords: ${input.jdDigest.keywords.join(", ") || "(none)"}`,
+        `JD digest: ${input.jdDigest.role ? `role: ${input.jdDigest.role}; ` : ""}${
+          input.jdDigest.company ? `company: ${input.jdDigest.company}; ` : ""
+        }keywords: ${input.jdDigest.keywords.join(", ") || "(none)"}`,
         ...(input.jobDescription
           ? ["", "Job description (reword the summary and item text toward this — same facts, its wording):", input.jobDescription]
           : []),

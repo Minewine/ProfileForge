@@ -442,7 +442,7 @@ export type CVPlan = {
   /** JD must-have requirement texts (top ≤5, report order) the summary must
    *  foreground (feature 005 US3) — different reports ⇒ different summaries. */
   summaryRequirements: string[];
-  jdDigest: { role: string | null; keywords: string[] };
+  jdDigest: { role: string | null; company?: string; keywords: string[] };
   /** Capped raw job-description text (prompt-tailoring input; set by the plan
    *  stage, absent on hand-built plans). Absent ⇒ the draft sees only the digest. */
   jdText?: string;
@@ -882,7 +882,7 @@ export type LetterPlanItem = {
 export type LetterPlan = {
   kind: "letter";
   items: LetterPlanItem[];
-  jdDigest: { role: string | null; keywords: string[]; topRequirements: string[] };
+  jdDigest: { role: string | null; company?: string; keywords: string[]; topRequirements: string[] };
   /** Capped raw job-description text (prompt-tailoring input; set by the plan stage). */
   jdText?: string;
   maxWords: number;
@@ -1080,12 +1080,19 @@ export async function runPlanStage(ctx: StageContext): Promise<void> {
   // should mirror, so the full description is capped and attached to the plan.
   const analysis = await db.jobAnalysis.findUnique({
     where: { id: ctx.analysisId },
-    select: { jdText: true },
+    select: { jdText: true, jdRole: true, jdCompany: true },
   });
   const jdText = analysis?.jdText.slice(0, MAX_JD_PROMPT_CHARS);
+  const jdRole = analysis?.jdRole ?? null;
+  const jdCompany = analysis?.jdCompany ?? null;
 
   if (ctx.kind === "cover_letter") {
-    ctx.plan = { ...buildLetterPlan({ snapshot: ctx.pinnedSnapshot, report: ctx.matchReport, now: new Date() }), ...(jdText ? { jdText } : {}) };
+    const letterPlan = buildLetterPlan({ snapshot: ctx.pinnedSnapshot, report: ctx.matchReport, now: new Date() });
+    ctx.plan = {
+      ...letterPlan,
+      ...(jdText ? { jdText } : {}),
+      jdDigest: { ...letterPlan.jdDigest, role: jdRole, ...(jdCompany ? { company: jdCompany } : {}) },
+    };
     ctx.letterCvTexts = await currentCvTexts(ctx.analysisId);
     return;
   }
@@ -1114,7 +1121,11 @@ export async function runPlanStage(ctx: StageContext): Promise<void> {
     now: new Date(),
     pageBudget: ctx.settings.pageBudget, // feature 005: scales the per-section caps
   });
-  ctx.plan = { ...plan, ...(jdText ? { jdText } : {}) };
+  ctx.plan = {
+    ...plan,
+    ...(jdText ? { jdText } : {}),
+    jdDigest: { ...plan.jdDigest, role: jdRole },
+  };
   ctx.selection = plan.selection ?? null; // the record the same cut produced (null for letters)
 }
 

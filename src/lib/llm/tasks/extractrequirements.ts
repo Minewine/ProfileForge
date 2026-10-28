@@ -19,6 +19,8 @@ export const ExtractRequirementsOutputSchema = z.object({
       }),
     )
     .max(100),
+  role: z.string().min(1).max(200).nullish(),
+  company: z.string().min(1).max(200).nullish(),
 });
 
 const SYSTEM_PROMPT = `You are a precise job-description requirement extractor.
@@ -29,6 +31,7 @@ Rules (non-negotiable):
 - isHardConstraint is true ONLY for required tools, certifications, licenses, or explicit years of experience.
 - category is one of: skill, tool, years_experience, education, domain, language, other.
 - If nothing states a requirement, return an empty list. A missing requirement is better than an invented one.
+- role: the job title exactly as the document states it (e.g. "Senior Backend Engineer — Payments Platform"); null when the text names no role. company: the hiring company's name; null when absent or when the document is an anonymous posting. Never invent or guess either.
 - Respond ONLY with JSON matching the schema.`;
 
 export function ensureExtractRequirementsRegistered() {

@@ -23,6 +23,8 @@ type AnalysisWithRequirements = {
   languageManuallyCorrected: boolean;
   status: string;
   statusError: string | null;
+  jdRole: string | null; // extraction output — draft-prompt input (null = absent in the JD)
+  jdCompany: string | null;
   profileVersion: number | null;
   matchReport: unknown;
   semanticDropped: number;
@@ -120,6 +122,7 @@ export async function storeExtractedRequirements(
   userId: string,
   id: string,
   extracted: Array<{ text: string; category: string; importance: string; isHardConstraint: boolean }>,
+  extras: { role?: string | null; company?: string | null } = {},
 ) {
   const analysis = await getAnalysis(userId, id);
   assertStatus(analysis, ["created", "extracted", "failed"], "extract requirements for");
@@ -134,7 +137,13 @@ export async function storeExtractedRequirements(
     }
     await tx.jobAnalysis.update({
       where: { id },
-      data: { status: "extracted", statusError: null },
+      data: {
+        status: "extracted",
+        statusError: null,
+        // the draft prompts address the actual role/company (null = absent in the JD)
+        ...(extras.role !== undefined ? { jdRole: extras.role } : {}),
+        ...(extras.company !== undefined ? { jdCompany: extras.company } : {}),
+      },
     });
   });
   return { replacedRequirements: replaced, requirements: await getAnalysis(userId, id).then((a) => a.requirements) };

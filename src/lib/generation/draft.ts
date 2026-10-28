@@ -139,10 +139,11 @@ export function buildTaskPayload(plan: CVPlan, settings: GenerationSettings) {
     summarySources: plan.summarySources,
     summaryRequirements: plan.summaryRequirements,
     summaryMaxWords: settings.summaryMaxWords,
-    jdDigest:
-      plan.jdDigest.role !== null
-        ? { role: plan.jdDigest.role, keywords: plan.jdDigest.keywords }
-        : { keywords: plan.jdDigest.keywords },
+    jdDigest: {
+      ...(plan.jdDigest.role !== null ? { role: plan.jdDigest.role } : {}),
+      ...("company" in plan.jdDigest && plan.jdDigest.company ? { company: plan.jdDigest.company } : {}),
+      keywords: plan.jdDigest.keywords,
+    },
     ...(plan.jdText ? { jobDescription: plan.jdText } : {}),
     pageBudget: settings.pageBudget,
   };
@@ -235,6 +236,7 @@ export function buildLetterTaskPayload(
     // like the CV payload does (P0 review finding: null ≠ absent for zod).
     jdDigest: {
       ...(plan.jdDigest.role !== null ? { role: plan.jdDigest.role } : {}),
+      ...(plan.jdDigest.company ? { company: plan.jdDigest.company } : {}),
       keywords: plan.jdDigest.keywords,
       topRequirements: plan.jdDigest.topRequirements,
     },

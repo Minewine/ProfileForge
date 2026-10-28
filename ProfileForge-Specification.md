@@ -213,7 +213,7 @@ All tasks return structured JSON, respect zero-invention, and run through the us
 | Task | Input | Output | Notes |
 |------|-------|--------|-------|
 | `parseCV` | Raw text | Partial Profile with provenance flags | Date normalization to YYYY-MM mandatory. Flag low-confidence fields. |
-| `extractRequirements` | Job description | Structured requirements + keywords | Classify must vs nice. Mark hard constraints. |
+| `extractRequirements` | Job description | Structured requirements + keywords + role/company | Classify must vs nice. Mark hard constraints. Role title and company (null when absent) feed the generation draft prompts. |
 | `generateMatchReport` | Profile + requirements | MatchReport | Deterministic exact/alias first; semantic second. Cite evidence IDs. |
 | `generateTailoredCV` | Profile + MatchReport + notes | GeneratedCVContent with provenance | Evidence-aware selection (relevance + strength + impact + recency). No fixed bullet quotas. Record omissions. |
 | `generateCoverLetter` | Profile + MatchReport + tone | Structured letter | Do not invent; do not repeat CV. |

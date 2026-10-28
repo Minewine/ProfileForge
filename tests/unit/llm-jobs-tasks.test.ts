@@ -31,6 +31,8 @@ describe("extractRequirements task", () => {
                   { text: "Kubernetes", category: "tool", importance: "must", isHardConstraint: true },
                   { text: "Kafka", category: "tool", importance: "nice", isHardConstraint: false },
                 ],
+                role: "Senior Backend Engineer — Payments Platform",
+                company: null,
               }),
             },
           },
@@ -45,6 +47,10 @@ describe("extractRequirements task", () => {
       payload: { text: "a".repeat(300), language: "en" },
     });
     expect((result.data as { requirements: unknown[] }).requirements).toHaveLength(2);
+    // role/company ride along for the draft prompts (null = absent in the JD)
+    const data = result.data as { role?: string | null; company?: string | null };
+    expect(data.role).toBe("Senior Backend Engineer — Payments Platform");
+    expect(data.company).toBeNull();
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body.model).toBeDefined();

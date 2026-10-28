@@ -313,6 +313,8 @@ model JobAnalysis {
   languageManuallyCorrected Boolean  @default(false)
   status                    String   @default("created") // created | extracted | finalized | matched | failed
   statusError               String?
+  jdRole                    String? // job title as stated in the JD (extraction; null when absent) — draft-prompt input
+  jdCompany                 String? // hiring company name (extraction; null when absent) — draft-prompt input
   profileVersion            Int? // pinned at match time (parent FR-027)
   matchReport               Json? // immutable once written (canonical §4 shape + extensions)
   semanticDropped           Int      @default(0)

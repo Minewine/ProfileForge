@@ -264,6 +264,33 @@ describe("task payload schema conformance (review regression)", () => {
     expect(GenerateCoverLetterInputSchema.parse(payload)).toBeDefined();
   });
 
+  it("the CV payload carries the JD role and company when the plan digest has them", async () => {
+    const { GenerateTailoredCVInputSchema } = await import("@/lib/llm/tasks/generatetailoredcv");
+    const { buildTaskPayload } = await import("@/lib/generation/draft");
+    const plan = planFixture([item({ key: "exp.e1.1", kind: "experience", entryId: "e1" })]);
+    plan.jdDigest = { role: "Senior Backend Engineer", company: "Acme", keywords: ["Kubernetes"] };
+    const payload = buildTaskPayload(plan, {
+      outputLanguage: "en",
+      pageBudget: 2,
+      tone: "professional",
+      summaryMaxWords: 60,
+    }) as { jdDigest: { role?: string; company?: string } };
+    expect(payload.jdDigest.role).toBe("Senior Backend Engineer");
+    expect(payload.jdDigest.company).toBe("Acme");
+    expect(GenerateTailoredCVInputSchema.parse(payload)).toBeDefined();
+
+    // legacy plans (digest role null, no company) omit both — null ≠ absent for zod
+    const bare = planFixture([item({ key: "exp.e1.1", kind: "experience", entryId: "e1" })]);
+    const barePayload = buildTaskPayload(bare, {
+      outputLanguage: "en",
+      pageBudget: 2,
+      tone: "professional",
+      summaryMaxWords: 60,
+    }) as { jdDigest: { role?: string; company?: string } };
+    expect(barePayload.jdDigest).not.toHaveProperty("role");
+    expect(barePayload.jdDigest).not.toHaveProperty("company");
+  });
+
   it("the CV payload carries the capped job description when the plan has one", async () => {
     const { GenerateTailoredCVInputSchema } = await import("@/lib/llm/tasks/generatetailoredcv");
     const { buildTaskPayload } = await import("@/lib/generation/draft");

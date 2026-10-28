@@ -27,7 +27,9 @@ function baseline(over: Partial<BenchmarkBaseline> = {}): BenchmarkBaseline {
         selection_integrity: true,
         output_language_ok: true,
       },
-      "fr-poor-match": { requirement_coverage: 0.7 },
+      // baseline just above the calibrated floor: the band passes, only the
+      // floor can fail — isolating the waiver behavior
+      "fr-poor-match": { requirement_coverage: 0.46 },
     },
     ...over,
   };
@@ -81,17 +83,21 @@ describe("baseline comparison (US3)", () => {
     expect(
       compareWithBaseline({ caseResults: mk(0.84), baseline: baseline(), fixtureSetVersion: "abc123", weakMatchCaseIds: [] }).comparison.outcome,
     ).toBe("regressed");
-    // below absolute floor even though within band
+    // below absolute floor even though within band (floor calibrated to 0.45)
     const lowBaseline = baseline({
       cases: { "en-standard": { ...baseline().cases["en-standard"], requirement_coverage: 0.7 } },
     });
     expect(
       compareWithBaseline({ caseResults: mk(0.68), baseline: lowBaseline, fixtureSetVersion: "abc123", weakMatchCaseIds: [] }).comparison.outcome,
+    ).toBe("ok");
+    expect(
+      compareWithBaseline({ caseResults: mk(0.44), baseline: lowBaseline, fixtureSetVersion: "abc123", weakMatchCaseIds: [] }).comparison.outcome,
     ).toBe("regressed");
   });
 
   it("waives the requirement_coverage floor only for weak-match cases", () => {
-    const results = [caseResult("fr-poor-match", [...DETERMINISTIC_OK, m("requirement_coverage", 0.68, "model_dependent")])];
+    // 0.44 sits below the calibrated 0.45 floor but within any band
+    const results = [caseResult("fr-poor-match", [...DETERMINISTIC_OK, m("requirement_coverage", 0.44, "model_dependent")])];
     const waived = compareWithBaseline({
       caseResults: results,
       baseline: baseline(),

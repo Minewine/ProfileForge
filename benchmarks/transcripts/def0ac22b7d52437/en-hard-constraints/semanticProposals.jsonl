@@ -1,0 +1,1 @@
+{"inputHash":"1d7e740dc163d9a9dad61f3b89747c43eb80d297627c94d6f11f634122b392fd","model":"nvidia/nemotron-3.5-super-vl:free","response":{"proposals":[{"requirementIndex":2,"entryIds":["#12"],"rationale":"B.Sc. in Computer Science from University of Toronto satisfies the bachelor's degree requirement."}]},"usage":{"promptTokens":683,"completionTokens":968,"costUsd":0}}

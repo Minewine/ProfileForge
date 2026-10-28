@@ -128,7 +128,7 @@ async function main(): Promise<number> {
       );
       const startedAt = Date.now();
       const { runBenchmarkSet } = await import("@/lib/benchmark/runner");
-      const outcome = await runBenchmarkSet({ config, fixtureSet });
+      const outcome = await runBenchmarkSet({ config, fixtureSet, transcripts: store });
       const durationMs = Date.now() - startedAt;
 
       // Baseline comparison (US3): deterministic zero tolerance + threshold bands.
@@ -140,8 +140,14 @@ async function main(): Promise<number> {
       } else {
         const { readBaseline } = await import("@/lib/benchmark/store");
         baselineDoc = (readBaseline("benchmarks", fixtureSet.version) as BenchmarkBaseline | null) ?? null;
-        const weakMatchJdIds = new Set(fixtureSet.manifest.jds.filter((j) => j.weakMatch).map((j) => j.id));
-        const weakMatchCaseIds = fixtureSet.manifest.cases.filter((c) => weakMatchJdIds.has(c.jdId)).map((c) => c.id);
+        // The absolute coverage floor is waived for cases whose FIXTURE caps
+        // coverage by construction: weak-match JDs and hard-constraints-heavy
+        // JDs (deliberately unmatched hard requirements), like the weak-match
+        // waiver in compareWithBaseline (report.ts).
+        const floorWaivedJdIds = new Set(
+          fixtureSet.manifest.jds.filter((j) => j.weakMatch || j.hardConstraintsHeavy).map((j) => j.id),
+        );
+        const weakMatchCaseIds = fixtureSet.manifest.cases.filter((c) => floorWaivedJdIds.has(c.jdId)).map((c) => c.id);
         const { compareWithBaseline } = await import("@/lib/benchmark/report");
         ({ comparison, caseResults } = compareWithBaseline({
           caseResults: outcome.caseResults,

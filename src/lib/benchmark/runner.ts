@@ -34,6 +34,7 @@ import { scoreReport } from "@/lib/matching/score";
 import { getProfile, importFromDraft } from "@/lib/profile/repository";
 import { prepareDraft } from "@/lib/profile/prepareDraft";
 import { updateSettings } from "@/lib/settings/store";
+import type { TranscriptStore } from "@/lib/benchmark/transcripts";
 import { createRunUser } from "@/lib/benchmark/workspace";
 // Task registration side effects (the real router needs the registry; the
 // benchmark never registers new tasks).
@@ -275,8 +276,11 @@ export async function runBenchmarkCase(args: {
 export async function runBenchmarkSet(args: {
   config: BenchmarkConfig;
   fixtureSet: FixtureSet;
+  /** When provided, transcript files are scoped per fixture case (record AND
+   *  replay) — cases sharing a JD must never serve each other's pins. */
+  transcripts?: TranscriptStore;
 }): Promise<SetRunOutcome> {
-  const { config, fixtureSet } = args;
+  const { config, fixtureSet, transcripts } = args;
   const state: RunState = { runIds: new Set(), spendUsd: 0 };
   const selected = config.caseIds
     ? fixtureSet.manifest.cases.filter((c) => config.caseIds!.includes(c.id))
@@ -285,6 +289,7 @@ export async function runBenchmarkSet(args: {
   let incompleteReason: string | undefined;
 
   for (const testCase of selected) {
+    if (transcripts) transcripts.scope = testCase.id;
     try {
       results.push(await runBenchmarkCase({ testCase, fixtureSet, config, state }));
     } catch (err) {

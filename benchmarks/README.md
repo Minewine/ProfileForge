@@ -27,5 +27,6 @@ gates automation via exit codes (`0` pass · `1` regressed · `2` incomplete · 
 - Deterministic metrics are zero-tolerance (any change from baseline is a regression);
   model-dependent metrics use the bands in `specs/009-evaluation-benchmark/contracts/metrics.md`.
 - `--keyless` evaluates the deterministic stages only (matching, selection, render verification)
-  using pinned transcripts — the report says so explicitly.
+  using pinned transcripts — the report says so explicitly. Replay requires the same `--models`
+  mapping as the recording run (the transcript identity includes the model).
 - Full flag reference: [specs/009-evaluation-benchmark/contracts/cli.md](../specs/009-evaluation-benchmark/contracts/cli.md).

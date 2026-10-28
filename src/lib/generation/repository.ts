@@ -83,9 +83,12 @@ export async function markSucceeded(id: string) {
 
 export async function markFailed(id: string, statusError: string) {
   await loadForTransition(id, ["running"], "fail");
+  // statusError flows from arbitrary failure text (LLM/provider messages can
+  // carry a literal NUL byte, which Postgres rejects in text columns)
+  const safe = statusError.replace(/\0/g, "");
   return db.generationJob.update({
     where: { id },
-    data: { status: "failed", statusError, finishedAt: new Date() },
+    data: { status: "failed", statusError: safe, finishedAt: new Date() },
   });
 }
 

@@ -141,7 +141,8 @@ database URL targets `profileforge_e2e`. LLM calls are mocked in vitest; the E2E
 ### CI (specs/010-github-actions-ci)
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the same checks on every push and pull request, in one
-job: lint → typecheck (`npx tsc --noEmit`) → build → Vitest → Playwright e2e — any failure fails the run.
+job: lint → typecheck (`npx tsc --noEmit`) → build → Vitest → Playwright e2e → keyless benchmark
+(deterministic regression gate over matching/selection/render, no AI key) — any failure fails the run.
 The Vitest suite runs against a Postgres 16 **service container** (same image/credentials as compose
 `db`; the harness auto-creates and migrates `profileforge_test` there), while e2e keeps using its own
 compose `e2e-db`. Dependencies and Playwright browsers are cached between runs, superseded runs on the

@@ -180,9 +180,11 @@ describe("job lifecycle", () => {
     const analysisId = await matchedAnalysisId();
     const job = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
     await markRunning(job.id, "run-1");
-    const failed = await markFailed(job.id, "LLM_UNAVAILABLE: provider down");
+    // provider error text can carry a literal NUL byte — Postgres rejects 0x00
+    // in text columns, so markFailed must strip it instead of crashing
+    const failed = await markFailed(job.id, "LLM_UNAVAILABLE: provider\0down");
     expect(failed.status).toBe("failed");
-    expect(failed.statusError).toBe("LLM_UNAVAILABLE: provider down");
+    expect(failed.statusError).toBe("LLM_UNAVAILABLE: providerdown");
 
     const retried = await retryJob(job.id);
     expect(retried.status).toBe("queued");

@@ -32,18 +32,153 @@ export function transcriptInputHash(payload: unknown, model: string): string {
   return createHash("sha256").update(`${stableStringify(payload)}\0${model}`).digest("hex");
 }
 
+// --- Canonical id references for cross-run replay ---
+//
+// Several task payloads embed per-run database ids (the benchmark database is
+// reset per run ⇒ fresh cuids), so a raw payload hash can never replay across
+// runs: the keyed draft tasks' claim keys ("exp.<cuid>.1") and the
+// semantic-proposals digest's entry ids. Hashing and storage canonicalize those
+// id references to their positional index ("#0", "#1", …) within the request
+// list they belong to; replay materializes them back onto the current run's
+// ids. Content-preserving: the model's actual prompt keeps the real ids — only
+// the transcript identity is canonical.
+
+type CanonicalSpec = {
+  /** The payload list whose id references are canonicalized positionally. */
+  requestField: string;
+  requestIdField: string;
+  /** Response lists carrying references back into the request list: a scalar
+   *  id field (`idField`) and/or an array-of-ids field (`idsInField`). */
+  response: Array<{ field: string; idField?: string; idsInField?: string }>;
+};
+
+const CANONICAL_SPECS: Record<string, CanonicalSpec> = {
+  generateTailoredCV: {
+    requestField: "plan",
+    requestIdField: "key",
+    response: [
+      { field: "items", idField: "key" },
+      { field: "uncertainTranslations", idField: "key" },
+    ],
+  },
+  generateCoverLetter: {
+    requestField: "paragraphs",
+    requestIdField: "key",
+    response: [
+      { field: "paragraphs", idField: "key" },
+      { field: "uncertainTranslations", idField: "key" },
+    ],
+  },
+  semanticProposals: {
+    requestField: "profileDigest",
+    requestIdField: "id",
+    response: [{ field: "proposals", idsInField: "entryIds" }],
+  },
+};
+
+function requestIdsInOrder(task: string, payload: unknown): string[] | null {
+  const spec = CANONICAL_SPECS[task];
+  if (!spec) return null;
+  const arr = (payload as Record<string, unknown>)?.[spec.requestField];
+  if (!Array.isArray(arr)) return null;
+  const ids = arr.map((item) => (item as Record<string, unknown>)?.[spec.requestIdField]);
+  return ids.every((id) => typeof id === "string") ? (ids as string[]) : null;
+}
+
+/** Hash identity for a request: canonicalizable tasks hash the canonicalized payload. */
+export function transcriptRequestIdentity(task: string, payload: unknown, model: string): string {
+  const ids = requestIdsInOrder(task, payload);
+  if (!ids) return transcriptInputHash(payload, model);
+  const spec = CANONICAL_SPECS[task];
+  const canonical = structuredClone(payload) as Record<string, unknown>;
+  for (const [i, item] of (canonical[spec.requestField] as Array<Record<string, unknown>>).entries()) {
+    item[spec.requestIdField] = `#${i}`;
+  }
+  return transcriptInputHash(canonical, model);
+}
+
+/** Response stored in the transcript: real id references → positional "#i"
+ *  (references the request did not contain are kept verbatim — the caller
+ *  drops them). */
+function canonicalizeResponse(task: string, requestPayload: unknown, response: unknown): unknown {
+  const ids = requestIdsInOrder(task, requestPayload);
+  if (!ids) return response;
+  const spec = CANONICAL_SPECS[task];
+  const toCanonical = new Map(ids.map((id, i) => [id, `#${i}`]));
+  const clone = structuredClone(response) as Record<string, unknown>;
+  for (const out of spec.response) {
+    const arr = clone?.[out.field];
+    if (!Array.isArray(arr)) continue;
+    for (const item of arr) {
+      if (out.idField) {
+        const id = (item as Record<string, unknown> | null)?.[out.idField];
+        if (typeof id === "string" && toCanonical.has(id)) (item as Record<string, unknown>)[out.idField] = toCanonical.get(id);
+      }
+      if (out.idsInField) {
+        const list = (item as Record<string, unknown> | null)?.[out.idsInField];
+        if (Array.isArray(list)) {
+          (item as Record<string, unknown>)[out.idsInField] = list.map((id) =>
+            typeof id === "string" && toCanonical.has(id) ? toCanonical.get(id) : id,
+          );
+        }
+      }
+    }
+  }
+  return clone;
+}
+
+/** Pinned response served to the caller: "#i" → the current run's real id
+ *  (positional references without a matching request entry are left as-is and
+ *  dropped downstream, exactly like any other unresolvable reference). */
+function materializeResponse(task: string, requestPayload: unknown, response: unknown): unknown {
+  const ids = requestIdsInOrder(task, requestPayload);
+  if (!ids) return response;
+  const spec = CANONICAL_SPECS[task];
+  const clone = structuredClone(response) as Record<string, unknown>;
+  for (const out of spec.response) {
+    const arr = clone?.[out.field];
+    if (!Array.isArray(arr)) continue;
+    for (const item of arr) {
+      const resolve = (id: unknown): unknown => {
+        const match = typeof id === "string" ? /^#(\d+)$/.exec(id) : null;
+        return match && ids[Number(match[1])] !== undefined ? ids[Number(match[1])] : id;
+      };
+      if (out.idField) {
+        const id = (item as Record<string, unknown> | null)?.[out.idField];
+        if (typeof id === "string") (item as Record<string, unknown>)[out.idField] = resolve(id);
+      }
+      if (out.idsInField) {
+        const list = (item as Record<string, unknown> | null)?.[out.idsInField];
+        if (Array.isArray(list)) {
+          (item as Record<string, unknown>)[out.idsInField] = list.map(resolve);
+        }
+      }
+    }
+  }
+  return clone;
+}
+
 export class TranscriptStore {
   private readonly cache = new Map<string, TranscriptEntry[]>();
 
   constructor(readonly rootDir: string) {}
 
+  /** Per-case scoping (the runner sets this per fixture case): transcript files
+   *  live under <version>/<scope>/<task>.jsonl. Without a scope, the legacy
+   *  shared layout <version>/<task>.jsonl applies. Scoping prevents cases that
+   *  share a JD from serving each other's pinned extractions (last-wins lookup
+   *  is per file, and the two cases' extract payloads hash identically). */
+  scope: string | null = null;
+
   private fileFor(fixtureSetVersion: string, taskId: string): string {
-    return join(this.rootDir, fixtureSetVersion, `${taskId}.jsonl`);
+    return this.scope
+      ? join(this.rootDir, fixtureSetVersion, this.scope, `${taskId}.jsonl`)
+      : join(this.rootDir, fixtureSetVersion, `${taskId}.jsonl`);
   }
 
   record(fixtureSetVersion: string, taskId: string, entry: TranscriptEntry): void {
     const file = this.fileFor(fixtureSetVersion, taskId);
-    mkdirSync(join(this.rootDir, fixtureSetVersion), { recursive: true });
+    mkdirSync(join(this.rootDir, fixtureSetVersion, ...(this.scope ? [this.scope] : [])), { recursive: true });
     appendFileSync(file, JSON.stringify(entry) + "\n");
     this.cache.delete(file);
   }
@@ -59,7 +194,10 @@ export class TranscriptStore {
         .map((line) => JSON.parse(line) as TranscriptEntry);
       this.cache.set(file, entries);
     }
-    return entries.find((e) => e.inputHash === inputHash) ?? null;
+    // last matching entry wins: transcript files append across --record runs,
+    // and a later recording of the same input supersedes earlier ones (the
+    // keyed drafts of that run correspond to ITS extraction, not the first)
+    return entries.findLast((e) => e.inputHash === inputHash) ?? null;
   }
 }
 
@@ -69,9 +207,9 @@ export function makeRecordingTransport(inner: LlmTransport, store: TranscriptSto
     async execute(req) {
       const result = await inner.execute(req);
       store.record(fixtureSetVersion, req.task, {
-        inputHash: transcriptInputHash(req.payload, result.modelUsed),
+        inputHash: transcriptRequestIdentity(req.task, req.payload, result.modelUsed),
         model: result.modelUsed,
-        response: result.data,
+        response: canonicalizeResponse(req.task, req.payload, result.data),
         usage: result.usage,
       });
       return result;
@@ -95,7 +233,7 @@ export function makeReplayTransport(store: TranscriptStore, fixtureSetVersion: s
       if (model === undefined) {
         throw new ApiError("TRANSCRIPT_MISS", `Task "${req.task}" is not registered — cannot resolve its pinned transcript.`);
       }
-      const hash = transcriptInputHash(req.payload, model);
+      const hash = transcriptRequestIdentity(req.task, req.payload, model);
       const entry = store.lookup(fixtureSetVersion, req.task, hash);
       if (!entry) {
         throw new ApiError(
@@ -104,7 +242,11 @@ export function makeReplayTransport(store: TranscriptStore, fixtureSetVersion: s
             `Record one with --record using the same model mapping (${model}).`,
         );
       }
-      return { data: entry.response, usage: entry.usage, modelUsed: entry.model };
+      return {
+        data: materializeResponse(req.task, req.payload, entry.response),
+        usage: entry.usage,
+        modelUsed: entry.model,
+      };
     },
   };
 }

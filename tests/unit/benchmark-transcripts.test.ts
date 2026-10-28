@@ -12,6 +12,7 @@ import {
   resetTransport,
   TranscriptStore,
   transcriptInputHash,
+  transcriptRequestIdentity,
   stableStringify,
 } from "@/lib/benchmark/transcripts";
 
@@ -36,6 +37,123 @@ describe("transcript hashing", () => {
   it("sensitively covers both payload and model", () => {
     expect(transcriptInputHash({ text: "hello" }, "m1")).not.toBe(transcriptInputHash({ text: "hello" }, "m2"));
     expect(transcriptInputHash({ text: "hello" }, "m")).not.toBe(transcriptInputHash({ text: "hell" }, "m"));
+  });
+});
+
+describe("canonical claim keys for keyed tasks (cross-run replay)", () => {
+  const requestA = {
+    outputLanguage: "en",
+    plan: [
+      { key: "exp.cuid_run1_1.1", kind: "experience", sourceText: ["Led 5 engineers"], entryMeta: { title: "T", company: "C", dates: "2020 – 2022" } },
+      { key: "exp.cuid_run1_1.2", kind: "experience", sourceText: ["Shipped p95"], entryMeta: { title: "T", company: "C", dates: "2020 – 2022" } },
+    ],
+    skills: ["Go"],
+    summarySources: [],
+    summaryRequirements: [],
+    summaryMaxWords: 60,
+    jdDigest: { keywords: ["Go"] },
+    pageBudget: 2,
+  };
+  // a different run: same content, fresh cuids
+  const requestB = {
+    ...requestA,
+    plan: requestA.plan.map((i) => ({ ...i, key: i.key.replace("cuid_run1", "cuid_run2") })),
+  };
+
+  it("hashes keyed payloads by canonical position, not by the embedded ids", () => {
+    expect(transcriptRequestIdentity("generateTailoredCV", requestA, "m")).toBe(
+      transcriptRequestIdentity("generateTailoredCV", requestB, "m"),
+    );
+    // non-keyed tasks keep exact-payload identity
+    expect(transcriptRequestIdentity("extractRequirements", { text: "x", language: "en" }, "m")).toBe(
+      transcriptInputHash({ text: "x", language: "en" }, "m"),
+    );
+  });
+
+  it("semanticProposals: digest ids canonicalize positionally; entryIds materialize back", async () => {
+    registerTask({
+      name: "semanticProposals",
+      tier: "economy",
+      inputSchema: { parse: (v: unknown) => v } as never,
+      outputSchema: { parse: (v: unknown) => v } as never,
+      buildPrompt: () => [{ role: "system", content: "test" }],
+    });
+    const store = new TranscriptStore(mkdtempSync(join(tmpdir(), "pf-bench-digest-")));
+    const version = "fixver1";
+    const requestA = {
+      language: "en",
+      requirements: [{ text: "Kubernetes" }],
+      profileDigest: [
+        { id: "cuid_digest_1", type: "skill", text: "Kubernetes" },
+        { id: "cuid_digest_2", type: "bullet", text: "Operated clusters" },
+      ],
+    };
+    const requestB = {
+      ...requestA,
+      profileDigest: [
+        { id: "cuid_other_1", type: "skill", text: "Kubernetes" },
+        { id: "cuid_other_2", type: "bullet", text: "Operated clusters" },
+      ],
+    };
+    const inner = {
+      execute: vi.fn().mockResolvedValue({
+        data: { proposals: [{ requirementIndex: 0, entryIds: ["cuid_digest_2", "cuid_digest_1"], rationale: "r" }] },
+        usage,
+        modelUsed: "m",
+      }),
+    };
+    const recording = makeRecordingTransport(inner, store, version);
+    await recording.execute({ userId: "u", task: "semanticProposals", payload: requestA, runId: "r1", model: "m" });
+
+    const replay = makeReplayTransport(store, version);
+    const result = await replay.execute({ userId: "u", task: "semanticProposals", payload: requestB, runId: "r2", model: "m" });
+    const data = result.data as { proposals: Array<{ entryIds: string[] }> };
+    // entryIds materialized onto run-2's digest ids, preserving order
+    expect(data.proposals).toEqual([{ requirementIndex: 0, entryIds: ["cuid_other_2", "cuid_other_1"], rationale: "r" }]);
+  });
+
+  it("record → replay round-trips a keyed response onto the CURRENT run's keys", async () => {
+    registerTask({
+      name: "generateTailoredCV",
+      tier: "premium",
+      inputSchema: { parse: (v: unknown) => v } as never,
+      outputSchema: { parse: (v: unknown) => v } as never,
+      buildPrompt: () => [{ role: "system", content: "test" }],
+    });
+    const store = new TranscriptStore(mkdtempSync(join(tmpdir(), "pf-bench-keyed-")));
+    const version = "fixver1";
+    const inner = {
+      execute: vi.fn().mockResolvedValue({
+        data: {
+          summary: "s",
+          items: [
+            { key: "exp.cuid_run1_1.2", text: "second" },
+            { key: "exp.cuid_run1_1.1", text: "first" },
+            { key: "exp.cuid_unknown.9", text: "unkeyed junk" },
+          ],
+          uncertainTranslations: [{ key: "exp.cuid_run1_1.1", note: "n" }],
+        },
+        usage,
+        modelUsed: "m",
+      }),
+    };
+    const recording = makeRecordingTransport(inner, store, version);
+    await recording.execute({ userId: "u", task: "generateTailoredCV", payload: requestA, runId: "r1", model: "m" });
+    // stored response carries positional keys, not the recording run's cuids
+    const stored = JSON.parse(readFileSync(join(store.rootDir, version, "generateTailoredCV.jsonl"), "utf8").trim());
+    expect(stored.response.items.map((i: { key: string }) => i.key)).toEqual(["#1", "#0", "exp.cuid_unknown.9"]);
+
+    const replay = makeReplayTransport(store, version);
+    const result = await replay.execute({ userId: "u", task: "generateTailoredCV", payload: requestB, runId: "r2", model: "m" });
+    expect(result.modelUsed).toBe("m");
+    const data = result.data as { items: Array<{ key: string; text: string }>; uncertainTranslations: Array<{ key: string }> };
+    // positional keys are materialized onto run-2's keys; unknown keys pass through
+    expect(data.items).toEqual([
+      { key: "exp.cuid_run2_1.2", text: "second" },
+      { key: "exp.cuid_run2_1.1", text: "first" },
+      { key: "exp.cuid_unknown.9", text: "unkeyed junk" },
+    ]);
+    expect(data.uncertainTranslations).toEqual([{ key: "exp.cuid_run2_1.1", note: "n" }]);
   });
 });
 

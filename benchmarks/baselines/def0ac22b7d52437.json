@@ -1,0 +1,54 @@
+{
+  "fixtureSetVersion": "def0ac22b7d52437",
+  "pinnedAt": "2026-10-28T21:14:22.935Z",
+  "pinnedBy": "first baseline (per-case transcripts)",
+  "codeState": {
+    "sha": "dea4f2c",
+    "dirty": true
+  },
+  "models": {
+    "extractRequirements": "nvidia/nemotron-3.5-super-vl:free",
+    "semanticProposals": "nvidia/nemotron-3.5-super-vl:free",
+    "generateTailoredCV": "nvidia/nemotron-3.5-super-vl:free",
+    "generateCoverLetter": "nvidia/nemotron-3.5-super-vl:free"
+  },
+  "dictionaryVersion": "v1",
+  "cases": {
+    "en-hard-constraints": {
+      "requirement_coverage": 0.5,
+      "selection_integrity": true,
+      "omissions_reasoned": true,
+      "summary_length_ok": true,
+      "page_budget_ok": true,
+      "output_language_ok": true,
+      "extraction_gate_ok": true
+    },
+    "en-standard": {
+      "requirement_coverage": 0.6667,
+      "selection_integrity": true,
+      "omissions_reasoned": true,
+      "summary_length_ok": true,
+      "page_budget_ok": true,
+      "output_language_ok": true,
+      "extraction_gate_ok": true
+    },
+    "fr-cross-language": {
+      "requirement_coverage": 0.5,
+      "selection_integrity": true,
+      "omissions_reasoned": true,
+      "summary_length_ok": true,
+      "page_budget_ok": true,
+      "output_language_ok": true,
+      "extraction_gate_ok": true
+    },
+    "fr-poor-match": {
+      "requirement_coverage": 1,
+      "selection_integrity": true,
+      "omissions_reasoned": true,
+      "summary_length_ok": true,
+      "page_budget_ok": true,
+      "output_language_ok": true,
+      "extraction_gate_ok": true
+    }
+  }
+}

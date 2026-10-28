@@ -12,6 +12,7 @@
     "db:up": "docker compose up -d",
     "db:migrate": "prisma migrate dev",
     "fixtures": "node scripts/make-fixtures.mjs",
+    "benchmark": "tsx scripts/run-benchmark.ts",
     "e2e:install": "npx playwright install chromium",
     "test:e2e": "docker compose up -d e2e-db && node tests/e2e/scripts/reset-db.mjs && playwright test",
     "db:assign-owner": "tsx scripts/assign-owner.ts"

@@ -1,0 +1,17 @@
+Backend Engineer — Distributed Systems
+
+You will join our platform group to design, build, and operate services in a fast-moving product organization. We value pragmatic engineering: strong fundamentals over buzzwords, measurable impact over vanity metrics.
+
+What you will do:
+- Build and evolve APIs in Go backed by PostgreSQL
+- Participate in the design of our event-driven architecture (we use Kafka where it earns its complexity)
+- Improve observability, latency, and reliability across the platform
+- Review designs and mentor teammates
+
+What we look for:
+- Solid backend experience with Go or a similar statically typed language
+- Comfort with relational data modeling and query performance
+- Experience running services in production (Kubernetes or similar)
+- Clear written communication; you can explain a trade-off in a paragraph
+
+Nice to have: exposure to infrastructure-as-code (Terraform), caching layers (Redis), and bilingual environments.

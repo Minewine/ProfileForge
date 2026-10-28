@@ -58,3 +58,8 @@ tests/e2e/.seed-state.json
 tests/e2e/.auth-state.json
 gui-test-screenshots/
 uploads-e2e/
+
+# Benchmark (spec 009) — run reports & uploads are local artifacts;
+# baselines, fixtures, and transcripts stay committed
+benchmarks/runs/
+uploads-benchmark/

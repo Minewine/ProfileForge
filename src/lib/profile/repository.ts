@@ -56,9 +56,21 @@ const SECTION_DELEGATE = {
 // --- Profile ---
 
 export async function getOrCreateProfile(userId: string, language: LanguageCode = "en") {
-  const existing = await db.profile.findFirst({ where: { userId }, include: includeAll });
+  const findExisting = () =>
+    db.profile.findFirst({ where: { userId }, orderBy: { createdAt: "asc" }, include: includeAll });
+  const existing = await findExisting();
   if (existing) return existing;
-  return db.profile.create({ data: { language, userId }, include: includeAll });
+  try {
+    return await db.profile.create({ data: { language, userId }, include: includeAll });
+  } catch (err) {
+    // Lost a create race against a concurrent caller. The unique index on
+    // Profile.userId guarantees exactly one row — re-read it deterministically.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const existingAfterRace = await findExisting();
+      if (existingAfterRace) return existingAfterRace;
+    }
+    throw err;
+  }
 }
 
 const includeAll = {
@@ -265,8 +277,8 @@ function buildEntryUpdate(section: SectionName, existing: Record<string, unknown
 
 /**
  * Apply a bullet-set diff for an experience/project entry. Bullet ids must stay
- * stable across edits — PinnedSnapshotSchema requires them and Fact Guard keeps
- * per-bullet provenance. Payload items with a known id are updated in place
+ * stable across edits — PinnedSnapshotSchema requires them and the provenance
+ * drill-down keeps per-bullet evidence. Payload items with a known id are updated in place
  * (provenance fields only when provided; source fields never touched), id-less
  * items are created (user_entered — newly typed text is the user's, not the
  * document's), and stored ids absent from the payload are deleted.
@@ -381,21 +393,6 @@ async function detectDateOverlap(tx: Tx, profileId: string, excludeId: string): 
     message:
       "This role's dates overlap another role's — open the Profile editor and adjust the Start/End dates so each role has its own period.",
   };
-}
-
-/** Slice-3 generation guard (PROFILE_DATES_CONFLICT): any unresolved overlapping
- *  experience-date pair in the profile — same range semantics as detectDateOverlap. */
-export async function findDateOverlapConflict(profileId: string): Promise<Warning | null> {
-  const experiences = await db.experience.findMany({
-    where: { profileId },
-    select: { id: true, startDate: true },
-  });
-  for (const e of experiences) {
-    if (!e.startDate) continue;
-    const overlap = await detectDateOverlap(db, profileId, e.id);
-    if (overlap) return overlap;
-  }
-  return null;
 }
 
 // --- Import (contracts/api.md POST /api/profile/import) ---

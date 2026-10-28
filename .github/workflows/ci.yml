@@ -1,0 +1,95 @@
+# CI for ProfileForge (specs/010-github-actions-ci).
+#
+# One job on ubuntu-latest: lint → typecheck → build → unit/integration → e2e,
+# cheapest first so a broken commit fails fast. The Vitest suite runs against a
+# Postgres 16 service container (same image/credentials as compose `db`);
+# the e2e suite provisions its own isolated database via the existing
+# `npm run test:e2e` script (compose `e2e-db` on 5434 — see playwright.config.ts).
+# All commands are the project's existing npm scripts, invoked unchanged.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Superseded runs for the same ref are cancelled to conserve free-tier minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    # Same engine and credentials as docker-compose.yml's `db` service.
+    # The Vitest global setup (tests/global-setup.ts) derives `profileforge_test`
+    # from DATABASE_URL and runs `prisma migrate deploy` against it; Prisma
+    # creates the database if missing. The e2e scripts read DATABASE_URL only
+    # as the MAIN database for a safety guard and default their own
+    # E2E_DATABASE_URL to 5434, so this export never leaks into the e2e path.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: profileforge
+          POSTGRES_PASSWORD: profileforge
+          POSTGRES_DB: profileforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://profileforge:profileforge@localhost:5432/profileforge
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Get Playwright version
+        run: echo "PLAYWRIGHT_VERSION=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_ENV"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+        timeout-minutes: 20
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

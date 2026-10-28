@@ -48,13 +48,23 @@ export async function assignOwner(rawEmail: string, password?: string): Promise<
   }
 
   const existingSettings = await db.appSettings.findUnique({ where: { userId: user.id } });
+  const ownerProfile = await db.profile.findFirst({ where: { userId: user.id }, select: { id: true } });
 
-  const [profiles, sourceDocuments, jobAnalyses, llmUsageLogs] = await db.$transaction([
-    db.profile.updateMany({ where: { userId: null }, data: { userId: user.id } }),
+  const [sourceDocuments, jobAnalyses, llmUsageLogs] = await db.$transaction([
     db.sourceDocument.updateMany({ where: { userId: null }, data: { userId: user.id } }),
     db.jobAnalysis.updateMany({ where: { userId: null }, data: { userId: user.id } }),
     db.llmUsageLog.updateMany({ where: { userId: null }, data: { userId: user.id } }),
   ]);
+
+  // The legacy quarantined profile: attach it, or drop it if the owner already
+  // has their own (the unique constraint would reject both). Section rows and
+  // snapshots cascade with the profile.
+  let profiles = 0;
+  if (ownerProfile) {
+    profiles = (await db.profile.deleteMany({ where: { userId: null } })).count;
+  } else {
+    profiles = (await db.profile.updateMany({ where: { userId: null }, data: { userId: user.id } })).count;
+  }
 
   // The legacy singleton settings row: attach it, or drop it if the owner
   // already configured their own (the unique constraint would reject both).
@@ -67,7 +77,7 @@ export async function assignOwner(rawEmail: string, password?: string): Promise<
 
   return {
     user: { id: user.id, email: user.email },
-    counts: { profiles: profiles.count, sourceDocuments: sourceDocuments.count, jobAnalyses: jobAnalyses.count, llmUsageLogs: llmUsageLogs.count, appSettings },
+    counts: { profiles, sourceDocuments: sourceDocuments.count, jobAnalyses: jobAnalyses.count, llmUsageLogs: llmUsageLogs.count, appSettings },
   };
 }
 

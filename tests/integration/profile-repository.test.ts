@@ -4,10 +4,12 @@ import { ApiError } from "@/lib/api/errors";
 import {
   createEntry,
   deleteEntry,
+  getOrCreateProfile,
   getProfile,
   importFromDraft,
   listVersions,
   restoreVersion,
+  updateBasics,
   updateEntry,
   type SectionPayloads,
 } from "@/lib/profile/repository";
@@ -195,6 +197,91 @@ describe("profile repository", () => {
     expect((await getProfile(user.id)).skills.map((s) => s.name)).toEqual(["Go"]);
     const versions = await listVersions(user.id);
     expect(versions.versions[0].cause).toBe("restore");
+  });
+});
+
+describe("one profile per user — CV imports must land on the profile the editor reads", () => {
+  it("concurrent getOrCreateProfile calls resolve to a single shared profile", async () => {
+    const results = await Promise.all(Array.from({ length: 8 }, () => getOrCreateProfile(user.id)));
+    expect(new Set(results.map((p) => p.id)).size).toBe(1);
+    expect(await db.profile.findMany({ where: { userId: user.id } })).toHaveLength(1);
+  });
+
+  it("rejects a second profile row for the same user at the DB level", async () => {
+    await getOrCreateProfile(user.id);
+    await expect(db.profile.create({ data: { userId: user.id, language: "en" } })).rejects.toMatchObject({
+      code: "P2002",
+    });
+  });
+
+  it("basics and imported section entries end up on the same profile", async () => {
+    // Mirrors POST /api/profile/import: basics are carried over first, then
+    // section payloads are imported. A duplicate-profile race used to split
+    // these across two rows, so the editor saw basics only.
+    const doc = await seedSourceDoc();
+    await updateBasics(user.id, {
+      basics: { name: "Michael Coughlan", email: "coughlan@gmail.com", phone: "+41 78 900 0022", location: "Geneva, Switzerland" },
+    });
+    const payloads = {
+      experience: [
+        {
+          company: "Rametric",
+          title: "Founder & Lead Developer",
+          startDate: "2020-08",
+          endDate: "present",
+          provenance: "imported",
+          sourceDocumentId: doc.id,
+          sourceLocator: { page: 1 },
+          language: "en",
+          reviewFlag: null,
+          bullets: [
+            {
+              text: "Leading the development of Docsumm, an AI-powered document summarization tool.",
+              provenance: "imported",
+              sourceDocumentId: doc.id,
+              sourceLocator: { page: 1 },
+              language: "en",
+              containmentOk: true,
+              reviewFlag: null,
+            },
+          ],
+        },
+      ],
+      education: [
+        {
+          institution: "CSC",
+          provenance: "imported",
+          sourceDocumentId: doc.id,
+          sourceLocator: { page: 2 },
+          language: "en",
+        },
+      ],
+      skills: [{ name: "AI strategy", provenance: "imported", sourceDocumentId: doc.id, sourceLocator: { page: 2 } }],
+      languages: [],
+      projects: [],
+      certifications: [],
+    } satisfies SectionPayloads;
+    for (const mode of ["replace_parsed", "merge"] as const) {
+      // start each mode from a clean slate (keep the profile + basics row)
+      await db.profileSnapshot.deleteMany({});
+      await db.bullet.deleteMany({});
+      await db.experience.deleteMany({});
+      await db.education.deleteMany({});
+      await db.skill.deleteMany({});
+      await db.languageSkill.deleteMany({});
+      await db.project.deleteMany({});
+      await db.certification.deleteMany({});
+
+      await importFromDraft(user.id, doc.id, "en", payloads, mode);
+      const view = await getProfile(user.id);
+      expect(view.basics?.name).toBe("Michael Coughlan");
+      expect(view.experience).toHaveLength(1);
+      expect(view.experience[0]!.company).toBe("Rametric");
+      expect(view.experience[0]!.bullets).toHaveLength(1);
+      expect(view.education).toHaveLength(1);
+      expect(view.skills.map((s) => s.name)).toContain("AI strategy");
+      expect(await db.profile.findMany({ where: { userId: user.id } })).toHaveLength(1);
+    }
   });
 });
 

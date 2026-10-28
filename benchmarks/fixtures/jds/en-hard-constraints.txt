@@ -1,0 +1,19 @@
+Senior Backend Engineer — Platform Team
+
+We are building the data platform that powers our core product. You must have at least 5 years of professional Go development experience and hands-on production Kubernetes experience — you will own clusters end to end. A Bachelor's degree in Computer Science or a related field is required for this position.
+
+Responsibilities:
+- Design and operate high-throughput APIs (our current scale is several million requests per day)
+- Build event-driven pipelines on Kafka
+- Own reliability targets and on-call for the platform
+
+Requirements (hard):
+- 5+ years of Go
+- Production Kubernetes experience
+- Bachelor's degree in Computer Science or equivalent
+- Experience with PostgreSQL at scale
+
+Nice to have:
+- Terraform, Redis
+- French language skills for our Montreal office
+- Experience mentoring engineers

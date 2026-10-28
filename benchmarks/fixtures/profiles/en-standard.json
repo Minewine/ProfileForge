@@ -1,0 +1,77 @@
+{
+  "language": "en",
+  "sourceText": "Morgan Ellis — Senior Backend Engineer\nEXPERIENCE\nNorthwind Data, Senior Backend Engineer, 2019–2024. Cut API p95 latency by 40% between 2019 and 2024 while serving 2M requests/day across 3 regions. Led migration of 40+ services to Kubernetes with zero downtime. Introduced Kafka event pipelines processing 15M messages/day.\nBright Labs, Backend Engineer, 2016–2019. Built billing services in Go handling $12M annual volume between 2016 and 2019. Shipped a PostgreSQL schema-automation tool adopted by 5 teams.\nEDUCATION\nB.Sc. Computer Science, University of Toronto, 2012–2016\nSKILLS\nGo, Kubernetes, PostgreSQL, Kafka, Terraform, Redis\nLANGUAGES\nEnglish (native), French (B2)\nPROJECT\nService-mesh toolkit: open-source CLI for traffic shaping.\nCERTIFICATION\nCKA — Certified Kubernetes Administrator, 2022",
+  "draft": {
+    "basics": {
+      "name": "Morgan Ellis",
+      "email": "morgan.ellis@example.com",
+      "location": "Toronto, CA",
+      "headline": "Senior Backend Engineer"
+    },
+    "experience": [
+      {
+        "company": "Northwind Data",
+        "title": "Senior Backend Engineer",
+        "location": "Toronto, CA",
+        "startDateRaw": "2019-06",
+        "endDateRaw": "2024-03",
+        "skillsUsed": ["Go", "Kubernetes", "Kafka", "Redis"],
+        "bullets": [
+          { "text": "Cut API p95 latency by 40% between 2019 and 2024 while serving 2M requests/day across 3 regions.", "page": 1 },
+          { "text": "Led migration of 40+ services to Kubernetes with zero downtime.", "page": 1 },
+          { "text": "Introduced Kafka event pipelines processing 15M messages/day.", "page": 1 }
+        ]
+      },
+      {
+        "company": "Bright Labs",
+        "title": "Backend Engineer",
+        "startDateRaw": "2016-09",
+        "endDateRaw": "2019-05",
+        "skillsUsed": ["Go", "PostgreSQL"],
+        "bullets": [
+          { "text": "Built billing services in Go handling $12M annual volume between 2016 and 2019.", "page": 1 },
+          { "text": "Shipped a PostgreSQL schema-automation tool adopted by 5 teams.", "page": 1 }
+        ]
+      }
+    ],
+    "education": [
+      {
+        "institution": "University of Toronto",
+        "degree": "B.Sc.",
+        "field": "Computer Science",
+        "startDateRaw": "2012-09",
+        "endDateRaw": "2016-06",
+        "page": 1
+      }
+    ],
+    "skills": [
+      { "name": "Go" },
+      { "name": "Kubernetes" },
+      { "name": "PostgreSQL" },
+      { "name": "Kafka" },
+      { "name": "Terraform" },
+      { "name": "Redis" }
+    ],
+    "languages": [
+      { "name": "English", "proficiency": "native" },
+      { "name": "French", "proficiency": "B2" }
+    ],
+    "projects": [
+      {
+        "name": "Service-mesh toolkit",
+        "description": "Open-source CLI for traffic shaping in service meshes.",
+        "startDateRaw": "2022-01",
+        "endDateRaw": "2022-12",
+        "page": 2
+      }
+    ],
+    "certifications": [
+      {
+        "title": "CKA — Certified Kubernetes Administrator",
+        "issuer": "CNCF",
+        "issueDateRaw": "2022-05",
+        "page": 2
+      }
+    ]
+  }
+}

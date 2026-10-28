@@ -1,0 +1,31 @@
+{
+  "language": "fr",
+  "sourceText": "Camille Fournier — Développeuse backend\nEXPÉRIENCE\nAtelier Numérique, Développeuse backend, 2021 à aujourd'hui. Amélioration des temps de réponse de l'API de 35 % (mesures 2021–2023). Migration progressive vers Kubernetes.\nCOMPÉTENCES\nGo, Kubernetes, PostgreSQL\nLANGUES\nFrançais (natif), Anglais (courant)",
+  "draft": {
+    "basics": {
+      "name": "Camille Fournier",
+      "location": "Lyon, FR"
+    },
+    "experience": [
+      {
+        "company": "Atelier Numérique",
+        "title": "Développeuse backend",
+        "startDateRaw": "2021",
+        "endDateRaw": null,
+        "skillsUsed": ["Go", "Kubernetes"],
+        "bullets": [
+          { "text": "Amélioration des temps de réponse de l'API de 35 % (mesures 2021–2023).", "page": 1 },
+          { "text": "Migration progressive vers Kubernetes.", "page": 1 }
+        ]
+      }
+    ],
+    "education": [],
+    "skills": [{ "name": "Go" }, { "name": "Kubernetes" }, { "name": "PostgreSQL" }],
+    "languages": [
+      { "name": "Français", "proficiency": "natif" },
+      { "name": "Anglais", "proficiency": "courant" }
+    ],
+    "projects": [],
+    "certifications": []
+  }
+}

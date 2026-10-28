@@ -1,0 +1,68 @@
+{
+  "profiles": [
+    {
+      "id": "en-standard",
+      "file": "profiles/en-standard.json",
+      "purpose": "Complete senior-backend profile (Go/Kubernetes) with quantified, dated bullets; the primary matching and generation target.",
+      "edge": false
+    },
+    {
+      "id": "fr-thin-dates",
+      "file": "profiles/fr-thin-dates.json",
+      "purpose": "Sparse French profile with a year-only (ambiguous) start date and a single experience — exercises date flagging and thin-content generation.",
+      "edge": true
+    }
+  ],
+  "jds": [
+    {
+      "id": "en-hard-constraints",
+      "file": "jds/en-hard-constraints.txt",
+      "language": "en",
+      "purpose": "Requirement-heavy posting with multiple must-have hard constraints (years, stack, degree).",
+      "hardConstraintsHeavy": true,
+      "weakMatch": false
+    },
+    {
+      "id": "en-standard",
+      "file": "jds/en-standard.txt",
+      "language": "en",
+      "purpose": "Balanced backend-platform posting the standard profile should match strongly.",
+      "hardConstraintsHeavy": false,
+      "weakMatch": false
+    },
+    {
+      "id": "fr-poor-match",
+      "file": "jds/fr-poor-match.txt",
+      "language": "fr",
+      "purpose": "French digital-marketing posting that barely overlaps the engineering profile — the honest weak-match case.",
+      "hardConstraintsHeavy": false,
+      "weakMatch": true
+    }
+  ],
+  "cases": [
+    {
+      "id": "en-hard-constraints",
+      "profileId": "en-standard",
+      "jdId": "en-hard-constraints",
+      "outputLanguage": "en"
+    },
+    {
+      "id": "en-standard",
+      "profileId": "en-standard",
+      "jdId": "en-standard",
+      "outputLanguage": "en"
+    },
+    {
+      "id": "fr-cross-language",
+      "profileId": "fr-thin-dates",
+      "jdId": "en-standard",
+      "outputLanguage": "en"
+    },
+    {
+      "id": "fr-poor-match",
+      "profileId": "en-standard",
+      "jdId": "fr-poor-match",
+      "outputLanguage": "fr"
+    }
+  ]
+}

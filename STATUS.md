@@ -30,10 +30,17 @@ Testing ProfileForge at http://localhost:3000 via in-app browser, using
    Regression tests in `tests/integration/profile-repository.test.ts`
    ("one profile per user" block). Verified: dev DB repaired (5 experience /
    2 education / 9 skills visible in the editor alongside basics).
-2. **P1 — Imported links are mangled:** `www.linkedin.com/in/coughlan` became
+2. **P1 — FIXED 2026-10-28: Imported links are mangled.** `www.linkedin.com/in/coughlan` became
    `www.linkedin.com:in/coughlan` and `www.rametric.com` became
-   `www.rametric.com:www.rametric.com` (slash → colon). Likely a PDF text-extraction
-   artifact propagated unvalidated into the profile.
+   `www.rametric.com:www.rametric.com`. Root cause was NOT PDF extraction (re-extraction is clean):
+   the parse LLM emitted the garbage and two validation holes let it through — zod's `.url()` accepts
+   scheme-only strings like `www.rametric.com:www.rametric.com` (parsed as scheme "www.rametric.com")
+   while rejecting legitimate scheme-less links, and the parse draft's `projects[].link` was a loose
+   unvalidated string that `insertEntry` writes verbatim. Fix: shared `HttpUrlSchema`/`normalizeLink`
+   in `validation/schemas.ts` — scheme-less links normalize to `https://`, non-recoverable values are
+   dropped (never fatal to a parse/save); applied to `BasicsSchema.links` (dropping), the project
+   input/patch schemas (strict 400), and `prepareDraft`'s import payloads. Regression tests:
+   `tests/unit/link-validation.test.ts`.
 3. **P1 — `LLM_UNAVAILABLE` banner masks the real error.** Server log showed the
    configured economy model `minimax/minimax-m3.1-flash:free` was retired
    (OpenRouter HTTP 404, free period ended 2026-10-22), but the UI said only

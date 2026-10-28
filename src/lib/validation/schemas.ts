@@ -58,6 +58,34 @@ export function applyProvenanceInvariants<T extends z.ZodObject>(schema: T) {
 
 // --- Basics ---
 
+/** Scheme-less values ("www.x.com/a") are normalized to https://; anything
+ *  that is not an http(s) URL after that is rejected. Bare `.url()` is not
+ *  enough: `new URL()` accepts scheme-only garbage such as
+ *  "www.rametric.com:www.rametric.com" (parsed scheme "www.rametric.com") —
+ *  the LLM parser emitted exactly that in the wild, and it must never reach
+ *  the profile. Normalization also rescues scheme-less links that plain
+ *  `.url()` would reject (https:// prefix on "www.linkedin.com/in/..."). */
+const HttpUrlSchema = z
+  .string()
+  .trim()
+  .transform((v) => (/^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : `https://${v}`))
+  .pipe(z.string().url().refine((v) => /^https?:\/\//i.test(v), { message: "must be an http(s) URL" }));
+
+/** Normalize a raw link value from any source (LLM parse draft, user input):
+ *  non-string/blank/unrecoverable → null. A bad link is never worth failing a
+ *  parse or a save over, so callers drop instead of erroring. */
+export function normalizeLink(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const parsed = HttpUrlSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Links list: invalid entries are DROPPED, never fail the payload. */
+export const LinksSchema = z
+  .array(z.unknown())
+  .max(10)
+  .transform((arr) => arr.flatMap((item) => normalizeLink(item) ?? []));
+
 export const BasicsSchema = z.object({
   name: z.string().min(1).max(200),
   headline: z.string().max(300).nullish(),
@@ -65,7 +93,7 @@ export const BasicsSchema = z.object({
   location: z.string().max(200).nullish(),
   email: z.string().email().nullish(),
   phone: z.string().max(50).nullish(),
-  links: z.array(z.string().url()).max(10).nullish(),
+  links: LinksSchema.nullish(),
 });
 export type Basics = z.infer<typeof BasicsSchema>;
 
@@ -116,7 +144,7 @@ export const LanguageSkillInputSchema = ProvenanceFieldsSchema.extend({
 export const ProjectInputSchema = ProvenanceFieldsSchema.extend({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).nullish(),
-  link: z.string().url().nullish(),
+  link: HttpUrlSchema.nullish(),
   startDate: YearMonthSchema.nullish(),
   endDate: EndDateSchema.nullish(),
   order: z.number().int().default(0),
@@ -192,7 +220,7 @@ export const LanguageSkillPatchSchema = ProvenancePatchFields.extend({
 export const ProjectPatchSchema = ProvenancePatchFields.extend({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullish(),
-  link: z.string().url().nullish(),
+  link: HttpUrlSchema.nullish(),
   startDate: YearMonthSchema.nullish(),
   endDate: EndDateSchema.nullish(),
   order: z.number().int().optional(),

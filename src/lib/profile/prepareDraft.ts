@@ -1,6 +1,6 @@
 import { normalizeDate } from "@/lib/dates/normalize";
 import { checkContainment } from "@/lib/validation/sourceContainment";
-import type { ProfileDraft } from "@/lib/validation/schemas";
+import { normalizeLink, type ProfileDraft } from "@/lib/validation/schemas";
 import type { SectionPayloads } from "@/lib/profile/repository";
 
 export type DraftFlag = { code: string; detail: string };
@@ -116,7 +116,10 @@ export function prepareDraft(
       return {
         name: p.name,
         description: p.description ?? null,
-        link: p.link ?? null,
+        // the parse task's link field is a loose string — normalize here so
+        // scheme-less links work and garbage never reaches the profile
+        // (the .url() loophole let "www.x.com:www.x.com" through once)
+        link: normalizeLink(p.link),
         startDate: start.value,
         endDate: end.value,
         order: i,

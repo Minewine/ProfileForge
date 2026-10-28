@@ -22,6 +22,8 @@ export const GenerateTailoredCVInputSchema = z.object({
   summaryRequirements: z.array(z.string()).max(5), // JD must-haves the summary connects evidence to (US3; may be empty)
   summaryMaxWords: z.number().int().min(30).max(120), // user-facing length bound (US3)
   jdDigest: z.object({ role: z.string().optional(), keywords: z.array(z.string()) }),
+  /** Capped raw job-description text — the primary wording target. */
+  jobDescription: z.string().min(1).optional(),
   pageBudget: z.number().int().min(1).max(3),
 });
 
@@ -42,6 +44,7 @@ const LANGUAGE_NAMES = { fr: "French", en: "English", de: "German" } as const;
 const SYSTEM_PROMPT = `You draft a tailored CV from a deterministic, evidence-keyed plan.
 Rules (non-negotiable):
 - Zero invention: use only facts present in the provided plan items or explicitly confirmed by the user. Link every material claim to evidence. Do not invent metrics, tools, employers, or achievements.
+- Reword toward the job description: when a jobDescription is provided, rephrase the summary and item text so the wording, emphasis, and terminology mirror how the description describes the work — lead with the experience the description asks for, use its vocabulary where the source supports it. Rewording only: never add, merge, or drop facts.
 - Write every narrative string (summary, item text, rationale) in the requested output language.
 - Preserve employer, institution, and certification names verbatim — never translate or adapt them.
 - Copy every number, date, duration, and metric exactly as it appears in sourceText — never round, convert, or estimate.
@@ -85,6 +88,9 @@ export function ensureGenerateTailoredCVRegistered() {
         "",
         `Skills (deterministic — echo verbatim, never extend): ${input.skills.join(", ") || "(none)"}`,
         `JD digest: ${input.jdDigest.role ? `role: ${input.jdDigest.role}; ` : ""}keywords: ${input.jdDigest.keywords.join(", ") || "(none)"}`,
+        ...(input.jobDescription
+          ? ["", "Job description (reword the summary and item text toward this — same facts, its wording):", input.jobDescription]
+          : []),
       ]
         .filter((line) => line !== null)
         .join("\n");

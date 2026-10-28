@@ -8,10 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { ClaimReview, type ValidationReportView } from "@/components/generation/ClaimReview";
 import { OmissionsList } from "@/components/generation/OmissionsList";
 import { SelectionView, type SelectionRecordView } from "@/components/generation/SelectionView";
-import { describeError, type DescribedError } from "@/lib/client-messages";
+import { describeError, FLAG_EXPLANATIONS, type DescribedError } from "@/lib/client-messages";
 
 // Local view types over the API payloads (importing lib schemas would pull
 // node:crypto into the client bundle — same convention as the jobs page).
@@ -85,6 +84,12 @@ type DocumentView = {
     selection: SelectionRecordView | null;
     extractionCheck?: ExtractionCheckView;
   } | null;
+};
+
+/** Warnings-only validation report (Fact Guard removed — informational). */
+type ValidationReportView = {
+  flags: Array<{ code: string; claim: string; severity: string }>;
+  summary: { blockers: number; warnings: number };
 };
 
 type PollPayload = { job: JobView; document: DocumentView | null };
@@ -312,14 +317,11 @@ export function GenerationPanel({
   // Feature 006 US2 (data-model.md ExportGateState): the download area derives
   // its per-gate explanations from the polled payload — no API change. The
   // server's computeDownloadable stays the authority on WHETHER downloads open.
-  const blockersPending = (document?.summary.blockers ?? 0) > 0;
-  const validationIncomplete = !document?.version?.validationReport.layersRun.semantic;
+  // Since the Fact Guard removal the only closable gate is the PDF extraction
+  // check — the validation report is warnings-only and gates nothing.
 
   /** Why a format's download button is disabled (live gate matrix, R12). */
   function downloadDisabledReason(format: "pdf" | "docx" | "txt"): string {
-    const blockers = document?.summary.blockers ?? 0;
-    if (blockers > 0) return `resolve ${blockers} blocker${blockers === 1 ? "" : "s"} first`;
-    if (!document?.version?.validationReport.layersRun.semantic) return "validation incomplete";
     if (format === "pdf" && gateFailed) return "export verification failed";
     return "not generated yet";
   }
@@ -483,9 +485,6 @@ export function GenerationPanel({
               <span className="text-neutral-500">
                 pinned profile v{job?.profileVersion} · attempt {job?.attempt}
               </span>
-              <Badge tone={document.summary.blockers > 0 ? "danger" : "success"}>
-                {document.summary.blockers} blockers
-              </Badge>
               <Badge tone={document.summary.warnings > 0 ? "warning" : "default"}>
                 {document.summary.warnings} warnings
               </Badge>
@@ -518,29 +517,6 @@ export function GenerationPanel({
             )}
             <div className="space-y-2 border-t border-neutral-200 pt-3">
               <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">Downloads</p>
-              {/* feature 006 US2: one explanation block per closed gate, in the
-                  contract order — blockers → validation-incomplete → verification-failed */}
-              {blockersPending && (
-                <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-800">
-                  <p className="font-medium">Claims need review first</p>
-                  <p>
-                    <a href="#claim-review" className="font-medium underline underline-offset-2">
-                      {document?.summary.blockers} claim{(document?.summary.blockers ?? 0) === 1 ? "" : "s"}
-                    </a>{" "}
-                    {"don't trace cleanly to your profile yet. Review them below — edit, remove, or confirm each " +
-                    "one. Downloads unlock when every blocker is resolved."}
-                  </p>
-                </div>
-              )}
-              {validationIncomplete && !gateFailed && (
-                <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-800">
-                  <p className="font-medium">Validation is incomplete</p>
-                  <p>
-                    The meaning-check could not run (the AI judge was unavailable), so downloads stay closed as a
-                    precaution. Your claims have NOT failed — regenerate to run the check again.
-                  </p>
-                </div>
-              )}
               <div className="flex flex-wrap items-center gap-2">
                 {(isLetterContent(content) ? (["pdf", "txt"] as const) : (["pdf", "docx"] as const)).map((format) => {
                   const reason = downloadDisabledReason(format);
@@ -571,8 +547,8 @@ export function GenerationPanel({
               </div>
               <p className="text-xs text-neutral-500">
                 {isLetterContent(content)
-                  ? "The letter PDF is gate-verified; plain text is for pasting into application forms. Both require every claim below to trace cleanly to the pinned profile snapshot."
-                  : "PDF downloads are gate-verified (extraction-checked); DOCX is best-effort. Both require every claim below to trace cleanly to the pinned profile snapshot."}
+                  ? "The letter PDF is gate-verified; plain text is for pasting into application forms."
+                  : "PDF downloads are gate-verified (extraction-checked); DOCX is best-effort."}
               </p>
               {gateFailed && extraction && (
                 <div className="space-y-1 rounded-md bg-red-50 p-2 text-xs text-red-700">
@@ -599,15 +575,17 @@ export function GenerationPanel({
                 </div>
               )}
             </div>
-            {document.version.validationReport && jobId && (
-              <div id="claim-review">
-                <ClaimReview
-                  jobId={jobId}
-                  report={document.version.validationReport}
-                  rows={rows}
-                  evidenceById={evidenceById}
-                  onChanged={() => void refresh(jobId)}
-                />
+            {document.version.validationReport && document.version.validationReport.summary.warnings > 0 && (
+              <div className="rounded-md bg-amber-50 p-2 text-xs text-amber-800">
+                <p className="font-medium">Draft notes ({document.version.validationReport.summary.warnings})</p>
+                <ul className="list-disc pl-5">
+                  {document.version.validationReport.flags.map((f, i) => (
+                    <li key={`${f.claim}-${i}`}>
+                      <span className="font-mono text-[10px] uppercase">{f.code}</span>{" "}
+                      {FLAG_EXPLANATIONS[f.code] ?? f.claim}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             <ul className="space-y-1">

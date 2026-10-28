@@ -4,9 +4,8 @@ import { db } from "@/lib/db";
 import { ApiError, errorResponse } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth/guard";
 import { getVersionForJob, getJob } from "@/lib/generation/repository";
-import { factGuardGate } from "@/lib/generation/factguard";
 import { readArtifactBytes } from "@/lib/generation/artifacts";
-import { ArtifactMetaSchema, ValidationReportSchema } from "@/lib/generation/schemas";
+import { ArtifactMetaSchema } from "@/lib/generation/schemas";
 import { generationArtifactDir } from "@/lib/generation/artifacts";
 import path from "node:path";
 
@@ -22,12 +21,10 @@ const CONTENT_TYPES: Record<"pdf" | "docx" | "txt", string> = {
 
 /**
  * Gated download (contracts/api.md): succeeded job with a version (409
- * GENERATION_INVALID_STATE) → Fact Guard fail-closed gate (409
- * FACTGUARD_UNAVAILABLE when the semantic layer did not run) → no pending
- * blockers (403 BLOCKERS_UNRESOLVED + flag summary) → format constraints:
- * `pdf` additionally requires `extractionCheck.passed` (409 EXPORT_GATE_FAILED
- * with the stored results otherwise); `docx`/`txt` are ungated by extraction
- * (parent exception) but blocker-gated like every artifact. 200 streams the
+ * GENERATION_INVALID_STATE) → format constraints: `pdf` additionally requires
+ * `extractionCheck.passed` (409 EXPORT_GATE_FAILED with the stored results
+ * otherwise); `docx`/`txt` are ungated by extraction (parent exception).
+ * The validation report is warnings-only and gates nothing. 200 streams the
  * file with `Content-Disposition: attachment; filename="{kind}-v{version}.{ext}"`.
  */
 export async function GET(req: NextRequest, { params }: Params) {
@@ -51,27 +48,6 @@ export async function GET(req: NextRequest, { params }: Params) {
     const version = document ? await getVersionForJob(id, document.id) : null;
     if (!version) {
       throw new ApiError("GENERATION_INVALID_STATE", "No document version was produced for this job.");
-    }
-
-    const parsedReport = ValidationReportSchema.safeParse(version.validationReport);
-    if (!parsedReport.success) {
-      throw new ApiError("GENERATION_INVALID_STATE", "The stored validation report is unreadable — cannot open the gate.");
-    }
-    const gate = factGuardGate(parsedReport.data);
-    if (gate.reason === "FACTGUARD_UNAVAILABLE") {
-      // fail-closed (FR-010): the report is incomplete even with zero flags —
-      // the deterministic flags stay visible in the details
-      throw new ApiError(
-        "FACTGUARD_UNAVAILABLE",
-        "The Fact Guard semantic layer did not run for this version — download is blocked until validation succeeds. Edit any claim to re-validate.",
-        { summary: parsedReport.data.summary, flags: parsedReport.data.flags },
-      );
-    }
-    if (gate.reason === "BLOCKERS_UNRESOLVED") {
-      throw new ApiError("BLOCKERS_UNRESOLVED", "Every blocking claim must be resolved or confirmed before download.", {
-        summary: parsedReport.data.summary,
-        flags: gate.pendingBlockers,
-      });
     }
 
     // format constraints (R12 gate matrix)

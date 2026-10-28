@@ -17,22 +17,24 @@
 |---|---|---|
 | [001-ats-cv-tailoring](specs/001-ats-cv-tailoring) | CV upload → parse → provenance-tracked profile (FR/EN) | Implemented |
 | [002-jd-matching](specs/002-jd-matching) | JD analysis; deterministic + alias + evidence-validated semantic matching | Implemented |
-| [003-cv-generation](specs/003-cv-generation) | Async CV/letter generation, Fact Guard gating, verified PDF export | Implemented |
+| [003-cv-generation](specs/003-cv-generation) | Async CV/letter generation, prompt-driven JD tailoring, verified PDF export | Implemented |
 | [004-profile-editing-e2e](specs/004-profile-editing-e2e) | Playwright end-to-end suite for the profile editor | Implemented |
 | [005-cv-selection-refinement](specs/005-cv-selection-refinement) | Explicit selection record, omissions list, keyed rewriting | Implemented |
 | [006-polish-reliability](specs/006-polish-reliability) | Loading/error/blocked-state UX, progress, dual-template export | Implemented |
 | [007-fix-profile-editor-crud](specs/007-fix-profile-editor-crud) | Profile editor CRUD + autosave restoration | Implemented |
 | [008-multi-user-isolation](specs/008-multi-user-isolation) | Accounts, sessions, per-user isolation, per-user encrypted keys | Implemented |
+| [009-evaluation-benchmark](specs/009-evaluation-benchmark) | Evaluation benchmark: generation quality over a pinned fixture set; baseline gating; keyless mode | Implemented |
 
 Deviations from this document: **multi-user is no longer deferred** (Slice 008 shipped accounts,
-isolation, and per-user keys; a second template — designed two-column — also shipped). Still
-**not started**: the **Evaluation** module (§3, `runBenchmark`) — no benchmark slice exists yet.
+isolation, and per-user keys; a second template — designed two-column — also shipped). The
+**Evaluation** module (§3, `runBenchmark`) shipped as Slice 009.
 Still deferred by design: multiple profiles per user, account deletion / password reset / email
 verification, job-board integrations.
 
-Verification (2026-10-28): production build green; Vitest 420/420; Playwright e2e 45 passed /
-1 skipped (the live upload/parse scenario self-skips without an OpenRouter key); ESLint 0 errors.
-Known gaps and prioritized next steps: [CONSOLIDATION.md](CONSOLIDATION.md).
+Verification (2026-10-28): production build green; Vitest 494/494 (incl. 74 benchmark tests);
+Playwright e2e 45 passed / 1 skipped (the live upload/parse scenario self-skips without an
+OpenRouter key); ESLint 0 errors. Known gaps and prioritized next steps:
+[CONSOLIDATION.md](CONSOLIDATION.md).
 
 ---
 
@@ -63,7 +65,7 @@ A web application that maintains a single, complete, structured career profile a
 | **Job Analysis** | Extract requirements and produce deterministic + LLM-assisted match report | `analyzeJob(jdText, profile) → MatchReport` |
 | **Generation** | Produce tailored CV content and cover letter (async) with claim links | `generateApplication(...) → jobId` |
 | **Templates** | Render structured content into ATS-safe PDFs with validation | `renderCV(content, templateId) → PDF + Validation` |
-| **Fact Guard** | Claim-level validation; blockers prevent export | `validateClaims(content, profile) → ValidationReport` |
+| **JD Tailoring** | Reword drafted content toward the job description (facts fixed) | `plan.jdText → draft prompts` |
 | **Application Store** | Persist applications, MatchReports, provenance, and versions | CRUD on Application records |
 | **LLM Router** | Route all calls via user’s OpenRouter API key | `callLLM(task, payload, model?)` |
 | **Evaluation** | Run fixed benchmark set for regression testing | `runBenchmark()` |
@@ -167,18 +169,20 @@ interface GeneratedCVContent {
 }
 ```
 
-### ValidationReport
+### ValidationReport (warnings-only)
+
+Draft warnings (verbatim fallback, uncertain translation) are recorded informationally;
+they never gate downloads (Fact Guard removed 2026-10-28).
 
 ```ts
 interface ValidationReport {
   flags: {
     code: string                     // machine-readable
     claim: string
-    severity: "blocker" | "warning"
-    affectedFieldIds?: string[]
-    sourceEvidence?: EvidenceRef[]
+    severity: "warning"
     resolution?: "pending" | "user_confirmed" | "edited" | "removed"
   }[]
+  summary: { blockers: number, warnings: number }
 }
 ```
 
@@ -213,12 +217,14 @@ All tasks return structured JSON, respect zero-invention, and run through the us
 | `generateMatchReport` | Profile + requirements | MatchReport | Deterministic exact/alias first; semantic second. Cite evidence IDs. |
 | `generateTailoredCV` | Profile + MatchReport + notes | GeneratedCVContent with provenance | Evidence-aware selection (relevance + strength + impact + recency). No fixed bullet quotas. Record omissions. |
 | `generateCoverLetter` | Profile + MatchReport + tone | Structured letter | Do not invent; do not repeat CV. |
-| `factGuard` | Generated content + Profile | ValidationReport | Claim-level. Material unsupported claims are blockers. |
 
 ### Prompt constraints
 - “Use only facts present in the provided profile or explicitly confirmed by the user. Link every material claim to evidence. Do not invent metrics, tools, employers, or achievements.”
 - Prefer action-oriented, quantifiable language only when the numbers already exist.
 - Prefer exact JD terminology for hard skills/tools when supported.
+- The draft prompts receive the raw job description (capped at 12,000 chars) and reword the
+  summary and bullets toward its vocabulary, priorities, and framing — rewording only, never
+  adding, merging, or dropping facts.
 
 ---
 
@@ -263,7 +269,7 @@ Pass/fail thresholds for extraction accuracy, match correctness, unsupported-cla
 | Profile Editor | Full CRUD with provenance tracking. Autosave. |
 | Job Analysis | MatchReport with matchMethod, evidence refs, score breakdown, and hard-constraint status. |
 | Generate Application | Async. Evidence-aware content selection. Omissions inspectable. |
-| Fact Transparency | Claim-level flags. Blockers prevent download until resolved or user-confirmed. |
+| Fact Transparency | Claim provenance is inspectable in the UI; draft fallbacks surface as passive warnings. |
 | Download | PDF with automated text-layer validation. Optional DOCX. |
 | Persistence | Application + MatchReport + provenance saved. |
 | OpenRouter | User-supplied key (encrypted). All LLM calls use it. |
@@ -286,7 +292,7 @@ Pass/fail thresholds for extraction accuracy, match correctness, unsupported-cla
 
 ### Sprint 3 – Generation & Validation
 - Evidence-aware `generateTailoredCV` (no fixed quotas; record omissions).
-- Claim-level Fact Guard with blockers.
+- Prompt-driven JD tailoring (rewording only, facts fixed).
 - Single-column template + PDF rendering with automated text extraction validation.
 - Async job lifecycle (states, retries, cancellation).
 

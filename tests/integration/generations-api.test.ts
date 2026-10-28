@@ -154,7 +154,7 @@ beforeEach(async () => {
 });
 
 describe("POST /api/generations", () => {
-  it("guards: 409 ANALYSIS_NOT_MATCHED, 409 PROFILE_DATES_CONFLICT, 400 invalid settings, 404 unknown", async () => {
+  it("guards: 409 ANALYSIS_NOT_MATCHED, 400 invalid settings, 404 unknown", async () => {
     const { POST } = await import("@/app/api/generations/route");
 
     // analysis exists but is not matched
@@ -167,20 +167,8 @@ describe("POST /api/generations", () => {
     const unknown = await POST(jsonReq(BASE, "POST", { analysisId: "missing", kind: "cv" }) as never);
     expect(unknown.status).toBe(404);
 
-    // unresolved overlapping profile dates
-    const analysisId = await matchedAnalysis();
-    const profile = await getOrCreateProfile(user.id);
-    await db.experience.createMany({
-      data: [
-        { profileId: profile.id, company: "A", title: "T", startDate: "2020-01", endDate: "2021-01" },
-        { profileId: profile.id, company: "B", title: "T", startDate: "2020-06", endDate: "2022-01" },
-      ],
-    });
-    const conflict = await POST(jsonReq(BASE, "POST", { analysisId, kind: "cv" }) as never);
-    expect(conflict.status).toBe(409);
-    expect((await conflict.json()).error.code).toBe("PROFILE_DATES_CONFLICT");
-
     // invalid settings / kind → 400
+    const analysisId = await matchedAnalysis();
     const badSettings = await POST(
       jsonReq(BASE, "POST", { analysisId, kind: "cv", settings: { pageBudget: 9 } }) as never,
     );
@@ -189,7 +177,7 @@ describe("POST /api/generations", () => {
     expect(badKind.status).toBe(400);
   });
 
-  it("date-overlap conflict message directs to the Profile editor date fields (feature 006 US1, FR-003)", async () => {
+  it("allows generation despite overlapping experience dates (non-blocking warning only)", async () => {
     const analysisId = await matchedAnalysis();
     const profile = await getOrCreateProfile(user.id);
     const created = await db.experience.createMany({
@@ -202,32 +190,7 @@ describe("POST /api/generations", () => {
 
     const { POST } = await import("@/app/api/generations/route");
     const res = await POST(jsonReq(BASE, "POST", { analysisId, kind: "cv" }) as never);
-    expect(res.status).toBe(409);
-    const body = await res.json();
-    expect(body.error.code).toBe("PROFILE_DATES_CONFLICT");
-    // actionable wording per contracts/error-messages.md — and never "verify"
-    expect(body.error.message).toContain("overlapping experience dates");
-    expect(body.error.message).toContain("Profile editor");
-    expect(body.error.message).toContain("Start/End dates");
-    expect(body.error.message).not.toMatch(/verify/i);
-
-    // the suggested action actually works: fix the dates in the editor → 202
-    // (move B's start past A's end — B originally starts inside A's range)
-    const entries = await db.experience.findMany({
-      where: { profileId: profile.id, company: "Overlap B" },
-    });
-    const { PATCH } = await import("@/app/api/profile/entries/[section]/[id]/route");
-    const fixed = await PATCH(
-      new Request(`http://localhost:3000/api/profile/entries/experience/${entries[0]!.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startDate: "2022-02", endDate: "2023-01" }),
-      }) as never,
-      { params: Promise.resolve({ section: "experience", id: entries[0]!.id }) },
-    );
-    expect(fixed.status).toBe(200);
-    const ok = await POST(jsonReq(BASE, "POST", { analysisId, kind: "cv" }) as never);
-    expect(ok.status).toBe(202);
+    expect(res.status).toBe(202);
   });
 
   it("returns 202 with resolved settings and kicks the pipeline without awaiting", async () => {
@@ -311,7 +274,7 @@ describe("GET /api/generations(/[id])", () => {
     expect(polled.document).toEqual({
       documentId: created.documentId,
       currentVersion: 1, // empty pinned snapshot → placeholder version without an LLM call
-      downloadable: { pdf: false, docx: false, txt: false },
+      downloadable: { pdf: true, docx: true, txt: false },
       summary: { blockers: 0, warnings: 0 },
       version: {
         version: 1,
@@ -329,7 +292,6 @@ describe("GET /api/generations(/[id])", () => {
           omissions: [],
         },
         validationReport: {
-          layersRun: { deterministic: true, semantic: false },
           flags: [],
           summary: { blockers: 0, warnings: 0 },
         },
@@ -616,13 +578,11 @@ describe("US1 pipeline: plan → draft → persist", () => {
     expect(provenanceIds.length).toBeGreaterThan(0);
     for (const id of provenanceIds) expect(snapshotIds.has(id)).toBe(true);
 
-    // placeholder report keeps the download gate closed until US2/US3
+    // warnings-only report (Fact Guard removed): draft fallbacks surface as warnings
     const report = version.validationReport as {
-      layersRun: { deterministic: boolean; semantic: boolean };
       flags: Array<{ code: string; claim: string; severity: string }>;
       summary: { blockers: number; warnings: number };
     };
-    expect(report.layersRun).toEqual({ deterministic: true, semantic: false });
     expect(report.flags).toContainEqual(
       expect.objectContaining({ code: "VERBATIM_FALLBACK", claim: `exp.${seed.e1}.2`, severity: "warning" }),
     );
@@ -633,7 +593,7 @@ describe("US1 pipeline: plan → draft → persist", () => {
     expect(polled.document).toMatchObject({
       documentId: created.documentId,
       currentVersion: 1,
-      downloadable: { pdf: false, docx: false, txt: false },
+      downloadable: { pdf: true, docx: true, txt: false },
       summary: { blockers: 0, warnings: 5 },
       version: {
         version: 1,
@@ -644,7 +604,6 @@ describe("US1 pipeline: plan → draft → persist", () => {
           skills: ["Kubernetes"],
         },
         validationReport: {
-          layersRun: { deterministic: true, semantic: false },
           summary: { blockers: 0, warnings: 5 },
         },
       },
@@ -808,11 +767,6 @@ describe("US1 selection record (feature 005)", () => {
       plan?: Array<{ key: string; sourceText: string[] }>;
       claims?: Array<{ claimId: string }>;
     } }) => {
-      if (task === "factGuard") {
-        return Promise.resolve(
-          mockLLM({ verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })) }),
-        );
-      }
       return Promise.resolve(
         mockLLM({
           summary: "Platform engineer with deep Kubernetes operations experience.",
@@ -906,7 +860,6 @@ describe("US1 selection record (feature 005)", () => {
 
 type FlagShape = { code: string; claim: string; severity: string; resolution: string; confirmedAt?: string };
 type ReportShape = {
-  layersRun: { deterministic: boolean; semantic: boolean };
   flags: FlagShape[];
   summary: { blockers: number; warnings: number };
 };
@@ -924,258 +877,16 @@ function claimIds(seed: Seed) {
   };
 }
 
-/** The drafted bullet cites 3M while the pinned evidence says 2M — a deliberate
- *  NUMERIC_MISMATCH blocker for the resolution flows. */
-const BAD_NUMBER_TEXT = "Operated Kubernetes clusters serving 3M requests per day.";
+/** The 2M-requests bullet text the clean-export mocks draft (matches evidence). */
 const FIXED_TEXT = "Operated Kubernetes clusters serving 2M requests per day.";
 
-async function runGenerationOn(seed: Seed, analysisId: string, options: { semanticError?: boolean } = {}) {
-  const ids = claimIds(seed);
-  const { callLLM } = await import("@/lib/llm/router");
-  vi.mocked(callLLM).mockImplementation((({ task, payload }: { task: string; payload: { plan?: Array<{ key: string; sourceText: string[] }>; claims?: Array<{ claimId: string }> } }) => {
-    if (task === "factGuard") {
-      return options.semanticError
-        ? Promise.reject(new Error("economy model down"))
-        : Promise.resolve(
-            mockLLM({
-              verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })),
-            }),
-          );
-    }
-    return Promise.resolve(
-      mockLLM({
-        summary: "Platform engineer with deep Kubernetes operations experience.",
-        items: [
-          { key: ids.e1b1, text: BAD_NUMBER_TEXT, rationale: "JD-critical requirement" },
-          // echo ONLY the title keys (feature 005) — the other uncovered keys
-          // still fall back verbatim, preserving the 003-era warning assertions
-          ...(payload.plan ?? [])
-            .filter((i) => i.key.startsWith("expTitle."))
-            .map((i) => ({ key: i.key, text: i.sourceText.join(" ") })),
-        ],
-      }),
-    );
-  }) as never);
-
-  const { POST } = await import("@/app/api/generations/route");
-  const res = await POST(jsonReq(BASE, "POST", { analysisId, kind: "cv" }) as never);
-  const created = await res.json();
-  const { runGenerationJob } = await import("@/lib/generation/pipeline");
-  await runGenerationJob(created.generationJobId);
-  return created;
-}
-
-/** A succeeded job + version 1 whose `exp.{e1}.1` bullet carries a deliberate
- *  NUMERIC_MISMATCH blocker (3M claimed vs 2M evidence). */
-async function setupBlockedDocument(seed: Seed, options: { semanticError?: boolean } = {}) {
-  const analysisId = await matchedAnalysisWithEvidence(seed);
-  const created = await runGenerationOn(seed, analysisId, options);
-  return { created, analysisId };
-}
-
-describe("US2: Fact Guard gates download (claim resolution)", () => {
-  it("blocks download on a pending blocker (403 BLOCKERS_UNRESOLVED + summary); PATCH re-validates, bumps revision, resolution edited; unblocks", async () => {
-    const seed = await seedGenerationProfile();
-    const ids = claimIds(seed);
-    const { created } = await setupBlockedDocument(seed);
-
-    const job = await db.generationJob.findUniqueOrThrow({ where: { id: created.generationJobId } });
-    expect(job.status).toBe("succeeded"); // blockers never fail the job
-    const version = await db.generatedDocumentVersion.findFirstOrThrow({
-      where: { documentId: created.documentId },
-    });
-    const report = version.validationReport as ReportShape;
-    expect(report.layersRun).toEqual({ deterministic: true, semantic: true });
-    expect(report.flags).toContainEqual(
-      expect.objectContaining({ code: "NUMERIC_MISMATCH", claim: ids.e1b1, severity: "blocker", resolution: "pending" }),
-    );
-    expect(report.summary).toEqual({ blockers: 1, warnings: 4 }); // fallbacks: e1b2, proj, edu, cert
-
-    const { GET: download } = await import("@/app/api/generations/[id]/download/route");
-    const blocked = await download(
-      new Request(`${BASE}/${created.generationJobId}/download?format=pdf`) as never,
-      args(created.generationJobId),
-    );
-    expect(blocked.status).toBe(403);
-    const blockedBody = await blocked.json();
-    expect(blockedBody.error.code).toBe("BLOCKERS_UNRESOLVED");
-    expect(blockedBody.error.details.summary).toEqual({ blockers: 1, warnings: 4 });
-    expect(blockedBody.error.details.flags).toContainEqual(expect.objectContaining({ code: "NUMERIC_MISMATCH" }));
-
-    const { PATCH } = await import("@/app/api/generations/[id]/document/claims/route");
-    const patched = await PATCH(
-      jsonReq(`${BASE}/${created.generationJobId}/document/claims`, "PATCH", { claimId: ids.e1b1, text: FIXED_TEXT }) as never,
-      args(created.generationJobId),
-    );
-    expect(patched.status).toBe(200);
-    const patchedReport = ((await patched.json()) as { validationReport: ReportShape }).validationReport;
-    expect(patchedReport.flags).toContainEqual(
-      expect.objectContaining({ code: "NUMERIC_MISMATCH", claim: ids.e1b1, resolution: "edited" }),
-    );
-    expect(patchedReport.summary).toEqual({ blockers: 0, warnings: 4 }); // passing flags clear, warnings stay
-
-    const after = await db.generatedDocumentVersion.findUniqueOrThrow({ where: { id: version.id } });
-    expect(after.revision).toBe(1); // bumped by the edit
-    const content = after.content as import("@/lib/generation/schemas").GeneratedCVContent;
-    expect(content.experience.find((x) => x.id === seed.e1)!.bullets[0].text).toBe(FIXED_TEXT);
-
-    // unblocked (US3): the gate-verified PDF streams with Content-Disposition
-    const gated = await download(
-      new Request(`${BASE}/${created.generationJobId}/download?format=pdf`) as never,
-      args(created.generationJobId),
-    );
-    expect(gated.status).toBe(200);
-    expect(gated.headers.get("content-type")).toBe("application/pdf");
-    expect(gated.headers.get("content-disposition")).toBe('attachment; filename="cv-v1.pdf"');
-  });
-
-  it("DELETE removes the claim block; flag resolution removed; remaining content re-validated", async () => {
-    const seed = await seedGenerationProfile();
-    const ids = claimIds(seed);
-    const { created } = await setupBlockedDocument(seed);
-
-    const { DELETE } = await import("@/app/api/generations/[id]/document/claims/route");
-    const res = await DELETE(
-      jsonReq(`${BASE}/${created.generationJobId}/document/claims`, "DELETE", { claimId: ids.e1b1 }) as never,
-      args(created.generationJobId),
-    );
-    expect(res.status).toBe(200);
-    const report = ((await res.json()) as { validationReport: ReportShape }).validationReport;
-    expect(report.flags).toContainEqual(
-      expect.objectContaining({ code: "NUMERIC_MISMATCH", claim: ids.e1b1, resolution: "removed" }),
-    );
-    expect(report.summary).toEqual({ blockers: 0, warnings: 4 });
-
-    const version = await db.generatedDocumentVersion.findFirstOrThrow({
-      where: { documentId: created.documentId },
-    });
-    expect(version.revision).toBe(1);
-    const content = version.content as import("@/lib/generation/schemas").GeneratedCVContent;
-    const bullets = content.experience.find((x) => x.id === seed.e1)!.bullets;
-    expect(bullets).toHaveLength(1);
-    expect(bullets[0].claimId).toBe(ids.e1b2);
-  });
-
-  it("confirm records user_confirmed with attribution + fingerprint (no revision bump); the fingerprint carries onto an identical regenerated claim", async () => {
-    const seed = await seedGenerationProfile();
-    const ids = claimIds(seed);
-    const { created, analysisId } = await setupBlockedDocument(seed);
-    const { claimFingerprint } = await import("@/lib/generation/schemas");
-
-    const { POST: confirm } = await import("@/app/api/generations/[id]/document/claims/[claimId]/confirm/route");
-    const res = await confirm(null as never, {
-      params: Promise.resolve({ id: created.generationJobId, claimId: ids.e1b1 }),
-    });
-    expect(res.status).toBe(200);
-    const report = ((await res.json()) as { validationReport: ReportShape }).validationReport;
-    const confirmed = report.flags.find((f) => f.code === "NUMERIC_MISMATCH")!;
-    expect(confirmed).toMatchObject({ claim: ids.e1b1, resolution: "user_confirmed" });
-    expect(typeof confirmed.confirmedAt).toBe("string");
-
-    const version = await db.generatedDocumentVersion.findFirstOrThrow({
-      where: { documentId: created.documentId },
-    });
-    expect(version.revision).toBe(0); // confirm only sets resolution
-
-    const document = await db.generatedDocument.findUniqueOrThrow({ where: { id: created.documentId } });
-    const bullets = await db.bullet.findMany({ where: { experienceId: seed.e1 }, orderBy: { order: "asc" } });
-    expect(document.confirmations).toContainEqual({
-      fingerprint: claimFingerprint(BAD_NUMBER_TEXT, [bullets[0].id]),
-      confirmedAt: confirmed.confirmedAt,
-    });
-
-    // resolved (US3) ⇒ the gate-verified PDF streams
-    const { GET: download } = await import("@/app/api/generations/[id]/download/route");
-    const gated = await download(
-      new Request(`${BASE}/${created.generationJobId}/download?format=pdf`) as never,
-      args(created.generationJobId),
-    );
-    expect(gated.status).toBe(200);
-    expect(gated.headers.get("content-disposition")).toBe('attachment; filename="cv-v1.pdf"');
-
-    // regenerate with identical claim text → the blocker auto-resolves via the fingerprint (R10)
-    await runGenerationOn(seed, analysisId);
-    const v2 = await db.generatedDocumentVersion.findFirstOrThrow({
-      where: { documentId: created.documentId },
-      orderBy: { version: "desc" },
-    });
-    expect(v2.version).toBe(2);
-    const v2Report = v2.validationReport as ReportShape;
-    expect(v2Report.flags).toContainEqual(
-      expect.objectContaining({
-        code: "NUMERIC_MISMATCH",
-        claim: ids.e1b1,
-        resolution: "user_confirmed",
-        confirmedAt: confirmed.confirmedAt, // attributed to the original confirmation
-      }),
-    );
-  });
-
-  it("semantic-layer failure: job still succeeds, FACTGUARD_UNAVAILABLE blocks download with deterministic flags listed; PATCH stores the edit + 409", async () => {
-    const seed = await seedGenerationProfile();
-    const ids = claimIds(seed);
-    const { created } = await setupBlockedDocument(seed, { semanticError: true });
-
-    const job = await db.generationJob.findUniqueOrThrow({ where: { id: created.generationJobId } });
-    expect(job.status).toBe("succeeded"); // R8: only the download is gated
-    const version = await db.generatedDocumentVersion.findFirstOrThrow({
-      where: { documentId: created.documentId },
-    });
-    const report = version.validationReport as ReportShape;
-    expect(report.layersRun).toEqual({ deterministic: true, semantic: false });
-    expect(report.flags).toContainEqual(
-      expect.objectContaining({ code: "NUMERIC_MISMATCH", claim: ids.e1b1, resolution: "pending" }),
-    );
-
-    const { GET: download } = await import("@/app/api/generations/[id]/download/route");
-    const blocked = await download(
-      new Request(`${BASE}/${created.generationJobId}/download?format=pdf`) as never,
-      args(created.generationJobId),
-    );
-    expect(blocked.status).toBe(409);
-    const body = await blocked.json();
-    expect(body.error.code).toBe("FACTGUARD_UNAVAILABLE");
-    expect(body.error.details.flags).toContainEqual(expect.objectContaining({ code: "NUMERIC_MISMATCH" }));
-
-    const { PATCH } = await import("@/app/api/generations/[id]/document/claims/route");
-    const patched = await PATCH(
-      jsonReq(`${BASE}/${created.generationJobId}/document/claims`, "PATCH", { claimId: ids.e1b1, text: FIXED_TEXT }) as never,
-      args(created.generationJobId),
-    );
-    expect(patched.status).toBe(409);
-    const patchBody = await patched.json();
-    expect(patchBody.error.code).toBe("FACTGUARD_UNAVAILABLE");
-    expect(patchBody.error.details.validationReport.summary).toEqual({ blockers: 0, warnings: 4 });
-    expect(patchBody.error.details.validationReport.flags).toContainEqual(
-      expect.objectContaining({ code: "NUMERIC_MISMATCH", resolution: "edited" }),
-    );
-
-    // the edit IS stored with the deterministic flags refreshed; download stays blocked
-    const after = await db.generatedDocumentVersion.findFirstOrThrow({
-      where: { documentId: created.documentId },
-    });
-    expect(after.revision).toBe(1);
-    const afterContent = after.content as import("@/lib/generation/schemas").GeneratedCVContent;
-    expect(afterContent.experience.find((x) => x.id === seed.e1)!.bullets[0].text).toBe(FIXED_TEXT);
-    const stillBlocked = await download(
-      new Request(`${BASE}/${created.generationJobId}/download?format=pdf`) as never,
-      args(created.generationJobId),
-    );
-    expect(stillBlocked.status).toBe(409);
-    expect((await stillBlocked.json()).error.code).toBe("FACTGUARD_UNAVAILABLE");
-  });
-
-  it("GET document returns the full current version; 409 while the job has not succeeded; 404 unknown job", async () => {
+describe("GET /api/generations/[id]/document", () => {
+  it("returns the full current version; 409 while the job has not succeeded; 404 unknown job", async () => {
     const seed = await seedGenerationProfile();
     const ids = claimIds(seed);
     const analysisId = await matchedAnalysisWithEvidence(seed);
     const { callLLM } = await import("@/lib/llm/router");
-    vi.mocked(callLLM).mockImplementation((({ task, payload }: { task: string; payload: { plan?: Array<{ key: string; sourceText: string[] }>; claims?: Array<{ claimId: string }> } }) => {
-      if (task === "factGuard") {
-        return Promise.resolve(
-          mockLLM({ verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })) }),
-        );
-      }
+    vi.mocked(callLLM).mockImplementation((({ payload }: { payload: { plan?: Array<{ key: string; sourceText: string[] }> } }) => {
       return Promise.resolve(
         mockLLM({
           summary: "Platform engineer with deep Kubernetes operations experience.",
@@ -1222,7 +933,6 @@ describe("US2: Fact Guard gates download (claim resolution)", () => {
       ]),
       canDownload: { pdf: true, docx: true, txt: false },
       validationReport: {
-        layersRun: { deterministic: true, semantic: true },
         summary: { blockers: 0, warnings: 4 },
       },
     });
@@ -1230,32 +940,6 @@ describe("US2: Fact Guard gates download (claim resolution)", () => {
     expect(body.validationReport.flags.every((f: FlagShape) => f.severity === "warning")).toBe(true);
 
     expect((await GET(null as never, args("missing"))).status).toBe(404);
-  });
-
-  it("claim routes: 404 CLAIM_NOT_FOUND for unknown claims; 400 on empty edit text", async () => {
-    const seed = await seedGenerationProfile();
-    const ids = claimIds(seed);
-    const { created } = await setupBlockedDocument(seed);
-
-    const { PATCH, DELETE } = await import("@/app/api/generations/[id]/document/claims/route");
-    const claimsUrl = `${BASE}/${created.generationJobId}/document/claims`;
-
-    const unknownPatch = await PATCH(jsonReq(claimsUrl, "PATCH", { claimId: "exp.nowhere.9", text: "x" }) as never, args(created.generationJobId));
-    expect(unknownPatch.status).toBe(404);
-    expect((await unknownPatch.json()).error.code).toBe("CLAIM_NOT_FOUND");
-
-    const unknownDelete = await DELETE(jsonReq(claimsUrl, "DELETE", { claimId: "bogus" }) as never, args(created.generationJobId));
-    expect(unknownDelete.status).toBe(404);
-
-    const { POST: confirm } = await import("@/app/api/generations/[id]/document/claims/[claimId]/confirm/route");
-    const unknownConfirm = await confirm(null as never, {
-      params: Promise.resolve({ id: created.generationJobId, claimId: "bogus" }),
-    });
-    expect(unknownConfirm.status).toBe(404);
-    expect((await unknownConfirm.json()).error.code).toBe("CLAIM_NOT_FOUND");
-
-    const emptyEdit = await PATCH(jsonReq(claimsUrl, "PATCH", { claimId: ids.e1b1, text: "   " }) as never, args(created.generationJobId));
-    expect(emptyEdit.status).toBe(400);
   });
 });
 
@@ -1272,13 +956,6 @@ async function setupCleanExport(seed: Seed) {
   const analysisId = await matchedAnalysisWithEvidence(seed);
   const { callLLM } = await import("@/lib/llm/router");
   vi.mocked(callLLM).mockImplementation((({ task, payload }: { task: string; payload: { plan?: Array<{ key: string; sourceText: string[] }>; claims?: Array<{ claimId: string }> } }) => {
-    if (task === "factGuard") {
-      return Promise.resolve(
-        mockLLM({
-          verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })),
-        }),
-      );
-    }
     return Promise.resolve(
       mockLLM({
         summary: "Platform engineer with deep Kubernetes operations experience.",
@@ -1346,7 +1023,6 @@ describe("US3: verified ATS export", () => {
     const analysisId = await matchedAnalysisWithEvidence(seed);
     const { callLLM } = await import("@/lib/llm/router");
     vi.mocked(callLLM).mockImplementation((({ task, payload }: { task: string; payload: { plan?: Array<{ key: string; sourceText: string[] }>; claims?: Array<{ claimId: string }> } }) => {
-      if (task === "factGuard") return Promise.resolve(mockLLM({ verdicts: [] }));
       return Promise.resolve(mockLLM({ summary: "Platform engineer.", items: [] }));
     }) as never);
 
@@ -1391,11 +1067,6 @@ describe("US3: verified ATS export", () => {
     const analysisId = await matchedAnalysisWithEvidence(seed);
     const { callLLM } = await import("@/lib/llm/router");
     vi.mocked(callLLM).mockImplementation((({ task, payload }: { task: string; payload: { plan?: Array<{ key: string; sourceText: string[] }>; claims?: Array<{ claimId: string }> } }) => {
-      if (task === "factGuard") {
-        return Promise.resolve(
-          mockLLM({ verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })) }),
-        );
-      }
       return Promise.resolve(
         mockLLM({
           summary: "Platform engineer with deep Kubernetes operations experience.",
@@ -1436,7 +1107,7 @@ describe("US3: verified ATS export", () => {
     expect(existsSync(uploadsPath("generations", versions[0].id, "cv.pdf"))).toBe(true);
   });
 
-  it("download streams pdf/docx with Content-Disposition; docx is ungated by extraction but blocker-gated; txt → 409 for now", async () => {
+  it("download streams pdf/docx with Content-Disposition; txt → 409 for a cv (no txt artifact)", async () => {
     const seed = await seedGenerationProfile();
     const created = await setupCleanExport(seed);
     const version = await db.generatedDocumentVersion.findFirstOrThrow({
@@ -1475,14 +1146,6 @@ describe("US3: verified ATS export", () => {
     expect(txt.status).toBe(409);
     expect((await txt.json()).error.code).toBe("GENERATION_INVALID_STATE");
 
-    // docx is ungated by extraction but still blocker-gated (R12: one gate for all formats)
-    const { created: blocked } = await setupBlockedDocument(seed);
-    const blockedDocx = await download(
-      new Request(`${BASE}/${blocked.generationJobId}/download?format=docx`) as never,
-      args(blocked.generationJobId),
-    );
-    expect(blockedDocx.status).toBe(403);
-    expect((await blockedDocx.json()).error.code).toBe("BLOCKERS_UNRESOLVED");
   });
 });
 
@@ -1554,7 +1217,7 @@ async function matchedFrenchAnalysis(seed: FrenchSeed): Promise<string> {
 }
 
 describe("US4: output language independent of the source", () => {
-  it("FR profile + FR JD → explicit EN output: EN narrative/headings, verbatim proper nouns, identical numbers, Fact Guard against FR evidence", async () => {
+  it("FR profile + FR JD → explicit EN output: EN narrative/headings, verbatim proper nouns, identical numbers", async () => {
     const seed = await seedFrenchProfile();
     const analysisId = await matchedFrenchAnalysis(seed);
     const ids = {
@@ -1566,13 +1229,6 @@ describe("US4: output language independent of the source", () => {
     };
     const { callLLM } = await import("@/lib/llm/router");
     vi.mocked(callLLM).mockImplementation((({ task, payload }: { task: string; payload: { plan?: Array<{ key: string; sourceText: string[] }>; claims?: Array<{ claimId: string }> } }) => {
-      if (task === "factGuard") {
-        return Promise.resolve(
-          mockLLM({
-            verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })),
-          }),
-        );
-      }
       return Promise.resolve(
         mockLLM({
           summary: "Platform engineer with deep Kubernetes operations experience.",
@@ -1604,19 +1260,10 @@ describe("US4: output language independent of the source", () => {
     const job = await db.generationJob.findUniqueOrThrow({ where: { id: created.generationJobId } });
     expect(job.status).toBe("succeeded");
 
-    // both LLM tasks received the output language, not the profile/JD language
+    // the draft received the output language, not the profile/JD language
     const draftPayload = vi.mocked(callLLM).mock.calls.find((c) => c[0].task === "generateTailoredCV")![0]
       .payload as { outputLanguage: string };
-    const guardPayload = vi.mocked(callLLM).mock.calls.find((c) => c[0].task === "factGuard")![0].payload as {
-      outputLanguage: string;
-      claims: Array<{ claimId: string; text: string; evidenceText: string[] }>;
-    };
     expect(draftPayload.outputLanguage).toBe("en");
-    expect(guardPayload.outputLanguage).toBe("en");
-    // the guard judged EN claims against the FR source evidence
-    const e1 = guardPayload.claims.find((c) => c.claimId === ids.e1b1)!;
-    expect(e1.text).toContain("2M requests");
-    expect(e1.evidenceText.join(" ")).toContain("2M requêtes");
 
     const version = await db.generatedDocumentVersion.findFirstOrThrow({
       where: { documentId: created.documentId },
@@ -1659,11 +1306,6 @@ describe("US4: output language independent of the source", () => {
     const ids = claimIds(seed);
     const { callLLM } = await import("@/lib/llm/router");
     vi.mocked(callLLM).mockImplementation((({ task, payload }: { task: string; payload: { plan?: Array<{ key: string; sourceText: string[] }>; claims?: Array<{ claimId: string }> } }) => {
-      if (task === "factGuard") {
-        return Promise.resolve(
-          mockLLM({ verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })) }),
-        );
-      }
       return Promise.resolve(
         mockLLM({
           summary: "Ingénieure plateforme avec une expertise Kubernetes de 2M requêtes par jour.",
@@ -1800,17 +1442,12 @@ async function matchedOverflowAnalysis(seed: OverflowSeed): Promise<string> {
   return analysis.id;
 }
 
-/** Mocked LLM for omission scenarios: every factGuard claim supported, the
- *  premium draft echoes e2's bullets (all other keys fall back verbatim). */
+/** Mocked LLM for omission scenarios: the premium draft echoes e2's bullets
+ *  (all other keys fall back verbatim). */
 function mockOmissionLLM(seed: OverflowSeed) {
   const e2b1 = `exp.${seed.e2}.1`;
   const e2b2 = `exp.${seed.e2}.2`;
   return async ({ task, payload }: { task: string; payload: { claims?: Array<{ claimId: string }> } }) => {
-    if (task === "factGuard") {
-      return mockLLM({
-        verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })),
-      });
-    }
     return mockLLM({
       summary: "Platform engineer with deep Kubernetes operations experience.",
       items: [
@@ -1994,11 +1631,6 @@ async function seedOverCapsProfile() {
  *  assertions below stay about the plan's cut, not the mock's choices. */
 function mockEchoLLM() {
   return (({ task, payload }: { task: string; payload: { plan?: Array<{ key: string; sourceText: string[] }>; claims?: Array<{ claimId: string }> } }) => {
-    if (task === "factGuard") {
-      return Promise.resolve(
-        mockLLM({ verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })) }),
-      );
-    }
     return Promise.resolve(
       mockLLM({
         summary: "Platform engineer delivering measurable cross-team outcomes.",
@@ -2317,13 +1949,6 @@ describe("US4: dual-template export matrix (feature 006)", () => {
 async function mockLetterLLM(paragraphTexts: string[], seed: Seed) {
   const { callLLM } = await import("@/lib/llm/router");
   vi.mocked(callLLM).mockImplementation((({ task, payload }: { task: string; payload: { plan?: Array<{ key: string; sourceText: string[] }>; claims?: Array<{ claimId: string }> } }) => {
-    if (task === "factGuard") {
-      return Promise.resolve(
-        mockLLM({
-          verdicts: paragraphTexts.map((_, i) => ({ claimId: `letter.${i + 1}`, verdict: "supported" })),
-        }),
-      );
-    }
     if (task === "generateCoverLetter") {
       return Promise.resolve(
         mockLLM({
@@ -2399,7 +2024,7 @@ describe("US6: complementary cover letter", () => {
     expect(extraction.passed).toBe(true);
   });
 
-  it("download?format=txt serves the plain-text letter; pdf served too; both blocker-gated", async () => {
+  it("download?format=txt serves the plain-text letter; pdf served too", async () => {
     const seed = await seedGenerationProfile();
     const analysisId = await matchedAnalysisWithEvidence(seed);
     await mockLetterLLM(LETTER_PARAGRAPHS, seed);
@@ -2428,44 +2053,12 @@ describe("US6: complementary cover letter", () => {
     expect(pdfRes.headers.get("Content-Type")).toBe("application/pdf");
   });
 
-  it("LETTER_DUPLICATES_CV: a letter reusing a current-CV bullet verbatim is a blocker that gates download", async () => {
-    const seed = await seedGenerationProfile();
-    const analysisId = await matchedAnalysisWithEvidence(seed);
-
-    // 1) generate the CV first so a current CV version exists (anti-repetition input)
-    await mockLetterLLM(LETTER_PARAGRAPHS, seed);
-    const { POST } = await import("@/app/api/generations/route");
-    const cvRes = await POST(jsonReq(BASE, "POST", { analysisId, kind: "cv" }) as never);
-    const cvCreated = await cvRes.json();
-    const { runGenerationJob } = await import("@/lib/generation/pipeline");
-    await runGenerationJob(cvCreated.generationJobId);
-    const cvJob = await db.generationJob.findUniqueOrThrow({ where: { id: cvCreated.generationJobId } });
-    expect(cvJob.status).toBe("succeeded");
-
-    // 2) letter whose first paragraph is the CV bullet verbatim
-    const cvBullet = "Operated Kubernetes clusters serving 2M requests per day.";
-    await mockLetterLLM([cvBullet, ...LETTER_PARAGRAPHS.slice(1)], seed);
-    const { body } = await createLetterGen(analysisId);
-    const job = await runLetterJob(body.generationJobId);
-    expect(job.status).toBe("succeeded"); // the guard blocks download, not the job
-
-    const { GET: download } = await import("@/app/api/generations/[id]/download/route");
-    const req = new Request(`${BASE}/${body.generationJobId}/download?format=txt`, { method: "GET" });
-    const res = await (download as never as (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>)(
-      req,
-      args(body.generationJobId),
-    );
-    expect(res.status).toBe(403);
-    const error = await res.json();
-    expect(error.error.code).toBe("BLOCKERS_UNRESOLVED");
-    expect(error.error.details.flags).toContainEqual(expect.objectContaining({ code: "LETTER_DUPLICATES_CV" }));
-  });
 });
 
 // --- US2 (feature 005): rewritten role titles end-to-end ---
 
 describe("US2: rewritten role titles (feature 005)", () => {
-  it("generation persists experience[].title; PATCH/DELETE/confirm round-trip expTitle claims; FR output rewrites the title", async () => {
+  it("generation persists experience[].title with sourceTitle; FR output rewrites the title", async () => {
     const seed = await seedGenerationProfile();
     const analysisId = await matchedAnalysisWithEvidence(seed);
     const { callLLM } = await import("@/lib/llm/router");
@@ -2473,11 +2066,6 @@ describe("US2: rewritten role titles (feature 005)", () => {
       plan?: Array<{ key: string; sourceText: string[] }>;
       claims?: Array<{ claimId: string }>;
     } }) => {
-      if (task === "factGuard") {
-        return Promise.resolve(
-          mockLLM({ verdicts: (payload.claims ?? []).map((c) => ({ claimId: c.claimId, verdict: "supported" })) }),
-        );
-      }
       // rewrite every keyed item — the title key gets a French rewrite with the
       // employer name NOT in the title (titles never carry employers)
       return Promise.resolve(
@@ -2518,36 +2106,6 @@ describe("US2: rewritten role titles (feature 005)", () => {
       sourceTitle: "Platform Engineer",
     });
 
-    // PATCH the rewritten title
-    const { PATCH } = await import("@/app/api/generations/[id]/document/claims/route");
-    const patched = await PATCH(
-      jsonReq(`${BASE}/${created.generationJobId}/document/claims`, "PATCH", {
-        claimId: `expTitle.${seed.e1}`,
-        text: "Ingénieur plateforme senior",
-      }) as never,
-      args(created.generationJobId),
-    );
-    expect(patched.status).toBe(200);
-    const afterPatch = (await db.generatedDocumentVersion.findFirstOrThrow({
-      where: { documentId: document.id },
-      orderBy: { version: "desc" },
-    })).content as import("@/lib/generation/schemas").GeneratedCVContent;
-    expect(afterPatch.experience.find((e) => e.id === seed.e1)!.title!.text).toBe("Ingénieur plateforme senior");
-    expect(afterPatch.experience.find((e) => e.id === seed.e1)!.title!.sourceTitle).toBe("Platform Engineer");
-
-    // DELETE reverts to the verbatim source title (never title-less)
-    const { DELETE } = await import("@/app/api/generations/[id]/document/claims/route");
-    const removed = await DELETE(
-      jsonReq(`${BASE}/${created.generationJobId}/document/claims`, "DELETE", { claimId: `expTitle.${seed.e1}` }) as never,
-      args(created.generationJobId),
-    );
-    expect(removed.status).toBe(200);
-    const afterDelete = (await db.generatedDocumentVersion.findFirstOrThrow({
-      where: { documentId: document.id },
-      orderBy: { version: "desc" },
-    })).content as import("@/lib/generation/schemas").GeneratedCVContent;
-    expect(afterDelete.experience.find((e) => e.id === seed.e1)!.title!.text).toBe("Platform Engineer");
-
-    // DELETE of a verbatim title is CLAIM_NOT_FOUND-safe? No — it reverts again (idempotent revert); 200
+    expect(entry.title!.sourceTitle).toBe("Platform Engineer");
   });
 });

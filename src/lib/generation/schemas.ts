@@ -1,7 +1,5 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { EvidenceRefSchema } from "@/lib/jobs/schemas";
-import { normalizeText } from "@/lib/text/normalize";
 
 // --- Kind & settings (data-model.md "Stored JSONB shapes") ---
 
@@ -188,9 +186,12 @@ export const SelectionRecordSchema = z.object({
 export type SelectionRecord = z.infer<typeof SelectionRecordSchema>;
 
 // --- Validation report ---
+// Warnings-only since the Fact Guard removal: the draft stage records
+// VERBATIM_FALLBACK / UNCERTAIN_TRANSLATION flags; nothing gates downloads on
+// this report any more (computeDownloadable checks artifacts + extraction).
 
 export const ValidationFlagSchema = z.object({
-  code: z.string().min(1), // contracts/generation-pipeline.md §Fact Guard
+  code: z.string().min(1),
   claim: z.string().min(1), // claimId addressed
   severity: z.enum(["blocker", "warning"]),
   affectedFieldIds: z.array(z.string()).optional(),
@@ -201,16 +202,12 @@ export const ValidationFlagSchema = z.object({
 export type ValidationFlag = z.infer<typeof ValidationFlagSchema>;
 
 export const ValidationReportSchema = z.object({
-  layersRun: z.object({
-    deterministic: z.literal(true), // always runs, zero AI
-    semantic: z.boolean(), // false ⇒ fail-closed gate
-  }),
   flags: z.array(ValidationFlagSchema),
   summary: z.object({ blockers: z.number().int().min(0), warnings: z.number().int().min(0) }),
 });
 export type ValidationReport = z.infer<typeof ValidationReportSchema>;
 
-// --- Artifacts & confirmations ---
+// --- Artifacts ---
 
 export const ArtifactMetaSchema = z.object({
   format: z.enum(["pdf", "docx", "txt"]),
@@ -220,12 +217,6 @@ export const ArtifactMetaSchema = z.object({
   gate: z.enum(["verified", "best_effort", "none"]), // pdf=verified after passing; docx=best_effort; txt=none
 });
 export type ArtifactMeta = z.infer<typeof ArtifactMetaSchema>;
-
-export const ClaimFingerprintSchema = z.object({
-  fingerprint: z.string().min(1),
-  confirmedAt: z.string().min(1),
-});
-export type ClaimFingerprint = z.infer<typeof ClaimFingerprintSchema>;
 
 // --- Stable claim ids (data-model.md: valid within a version) ---
 
@@ -294,12 +285,4 @@ export function parseClaimId(claimId: string): ParsedClaimId | null {
     if (Number.isInteger(n) && n >= 1) return { kind: "letter", n };
   }
   return null;
-}
-
-// --- Cross-version confirmation identity (R10) ---
-
-/** `sha256(normalizeText(claimText) + "|" + sorted(evidenceIds).join(","))` */
-export function claimFingerprint(claimText: string, evidenceIds: string[]): string {
-  const sorted = [...evidenceIds].sort();
-  return createHash("sha256").update(`${normalizeText(claimText)}|${sorted.join(",")}`).digest("hex");
 }

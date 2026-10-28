@@ -51,28 +51,26 @@ describe("server message sources (contract-checked by source read)", () => {
     expect(thrown).toMatch(/Settings/);
   });
 
-  it("router.ts LLM_SCHEMA_REPAIR_FAILED text keeps the Settings/model-switch action", () => {
-    const router = source("src/lib/llm/router.ts");
-    const thrown = router.match(/"The model repeatedly[^"]*"/)?.[0] ?? "";
+  it("the LLM execution path keeps the Settings/model-switch action on repair failure", () => {
+    // spec 009 US5 moved the execution body to the transport module; the
+    // user-facing contract text must survive the move.
+    const transport = source("src/lib/llm/transport.ts");
+    const thrown = transport.match(/"The model repeatedly[^"]*"/)?.[0] ?? "";
     expect(thrown).toMatch(/Settings/);
     expect(thrown).toMatch(/switch/i);
   });
 
-  it("router.ts logs provider failure detail before mapping (FR-002 diagnostic retention)", () => {
-    const router = source("src/lib/llm/router.ts");
+  it("the LLM execution path logs provider failure detail before mapping (FR-002 diagnostic retention)", () => {
+    const transport = source("src/lib/llm/transport.ts");
     // the redacted console.warn carrying status + body snippet in the failure path
-    expect(router).toMatch(/console\.warn\(redact\(/);
+    expect(transport).toMatch(/console\.warn\(redact\(/);
   });
 
-  it("the overlap conflict strings direct to the Profile editor and never say 'verify' (FR-003)", () => {
-    const sources = [
-      source("src/lib/profile/repository.ts"),
-      source("src/lib/generation/repository.ts"),
-    ].join("\n");
-    const literals = sources.match(/"(?:[^"\\\n]|\\.)*"/g) ?? [];
+  it("the overlap conflict string directs to the Profile editor and never says 'verify' (FR-003)", () => {
+    const literals = source("src/lib/profile/repository.ts").match(/"(?:[^"\\\n]|\\.)*"/g) ?? [];
     // message literals only — skip bare machine codes like "DATE_RANGE_OVERLAP"
     const overlapStrings = literals.filter((l) => /overlap/i.test(l) && l.includes(" "));
-    expect(overlapStrings.length).toBeGreaterThanOrEqual(2); // the editor warning + the generation guard
+    expect(overlapStrings.length).toBeGreaterThanOrEqual(1); // the editor warning (generation no longer blocks on overlap)
     for (const text of overlapStrings) {
       expect(text).not.toMatch(/verify/i);
       expect(text).toMatch(/Profile editor/i);

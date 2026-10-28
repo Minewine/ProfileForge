@@ -6,10 +6,9 @@ import {
   LLM_ERROR_GUIDANCE,
 } from "@/lib/client-messages";
 
-// Feature 006 foundational guard (contracts/error-messages.md +
-// contracts/fact-guard-ux.md): the shared client-safe message maps must cover
-// every code the server emits — a new code without guidance/explanation fails
-// here before it can ship unexplained.
+// Feature 006 foundational guard (contracts/error-messages.md): the shared
+// client-safe message maps must cover every code the server emits — a new code
+// without guidance/explanation fails here before it can ship unexplained.
 
 const LLM_CODES = [
   "LLM_KEY_INVALID",
@@ -19,21 +18,11 @@ const LLM_CODES = [
   "LLM_SCHEMA_REPAIR_FAILED",
 ] as const;
 
-/** The complete flag-code inventory emitted by the generation Fact Guard + draft
- *  merge (src/lib/generation/factguard.ts, src/lib/generation/draft.ts) —
- *  verified against the emitters on 2026-10-25. INCONSISTENT_STATE and friends
- *  (MISSING_LOCATOR, CONTAINMENT_UNRESOLVED) are profile-claims codes, not
- *  generation ValidationFlags — deliberately absent. */
-const FLAG_CODES = [
-  "NUMERIC_MISMATCH",
-  "MEANING_DRIFT",
-  "UNSUPPORTED_CLAIM",
-  "DANGLING_PROVENANCE",
-  "LETTER_DUPLICATES_CV",
-  "SKILL_UNVERIFIED",
-  "VERBATIM_FALLBACK",
-  "UNCERTAIN_TRANSLATION",
-] as const;
+/** The complete flag-code inventory emitted by the draft merge
+ *  (src/lib/generation/draft.ts) since the Fact Guard removal — warnings only.
+ *  Profile-claims codes (INCONSISTENT_STATE, MISSING_LOCATOR,
+ *  CONTAINMENT_UNRESOLVED) are not generation flags — deliberately absent. */
+const FLAG_CODES = ["VERBATIM_FALLBACK", "UNCERTAIN_TRANSLATION"] as const;
 
 describe("LLM_ERROR_GUIDANCE", () => {
   it("covers exactly the LLM error codes with short non-empty actions", () => {
@@ -64,9 +53,6 @@ describe("FLAG_EXPLANATIONS", () => {
       expect((text.match(/\./g) ?? []).length, code).toBeLessThanOrEqual(2); // one sentence (allow one abbreviation dot)
       expect(text).toMatch(/[—-] /); // dash-introduced action, per the contract strings
     }
-    expect(FLAG_EXPLANATIONS.NUMERIC_MISMATCH).toMatch(/confirm/i);
-    expect(FLAG_EXPLANATIONS.MEANING_DRIFT).toMatch(/confirm/i);
-    expect(FLAG_EXPLANATIONS.UNSUPPORTED_CLAIM).toMatch(/confirm/i);
     expect(FLAG_EXPLANATIONS.VERBATIM_FALLBACK).toMatch(/original/i);
     expect(FLAG_EXPLANATIONS.UNCERTAIN_TRANSLATION).toMatch(/double-check/i);
   });

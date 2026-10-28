@@ -1,5 +1,11 @@
 # Generation Pipeline Contract — Stages, Ranking, Fact Guard, Fitting, Gate
 
+> **DEPRECATED (2026-10-28)**: the Fact Guard stage was removed — generation is now
+> preconditions → plan → draft → render → gate → persist, with the validation report
+> warnings-only and no claim resolution. The draft LLM receives the raw job
+> description (`plan.jdText`, capped) and rewords toward it under the zero-invention
+> rules. This document remains for historical context only.
+
 The deterministic core of Slice 3 (analogue of slice 2's matching-engine contract). Every stage is pure except the marked LLM/persistence stages; cancellation is checked at every boundary.
 
 ## Stage machine (`src/lib/generation/pipeline.ts`)

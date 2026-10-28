@@ -6,7 +6,6 @@ import { PinnedSnapshotSchema } from "@/lib/generation/plan";
 import { renderCV } from "@/lib/generation/render/cv";
 import { runExtractionGate } from "@/lib/generation/verify";
 import { draftCV, mergeKeyedDraft } from "@/lib/generation/draft";
-import { numericTokens, runDeterministicLayer, runFactGuard } from "@/lib/generation/factguard";
 import type { GeneratedCVContent, GenerationSettings } from "@/lib/generation/schemas";
 import { resolveGenerationSettings } from "@/lib/generation/schemas";
 import type { MatchReport, RequirementMatch } from "@/lib/jobs/schemas";
@@ -268,16 +267,14 @@ describe("renderer headings follow settings.outputLanguage alone", () => {
 
 // --- Translation warnings surface as warning flags (never blockers) ---
 
-describe("translation warnings in the validation report", () => {
-  it("VERBATIM_FALLBACK (skipped key) and UNCERTAIN_TRANSLATION surface as warnings through runFactGuard", async () => {
-    const { callLLM } = await import("@/lib/llm/router");
-    const snapshot = snapshotFixture();
+describe("translation warnings from the draft merge", () => {
+  it("VERBATIM_FALLBACK (skipped key) and UNCERTAIN_TRANSLATION surface as warnings", async () => {
     const plan = planFixture([
       planItem({ key: "exp.e1.1", entryId: "e1", sourceText: ["Operated Kubernetes clusters serving 2M requests per day."], sourceIds: ["b1"] }),
       planItem({ key: "exp.e1.2", entryId: "e1", sourceText: ["Led a team of 5 engineers."], sourceIds: ["b2"] }),
     ]);
     // French draft over English sources: e1.1 translated, e1.2 skipped → verbatim English fallback
-    const { content, warnings } = mergeKeyedDraft(plan, {
+    const { warnings } = mergeKeyedDraft(plan, {
       summary: "Ingénieure plateforme avec une expertise Kubernetes de 2M requêtes par jour.",
       items: [{ key: "exp.e1.1", text: "Exploitation de clusters Kubernetes servant 2M requêtes par jour." }],
       uncertainTranslations: [{ key: "exp.e1.1", note: "credential name could not be mapped faithfully" }],
@@ -288,92 +285,18 @@ describe("translation warnings in the validation report", () => {
       severity: "warning",
       resolution: "pending",
     });
-
-    // semantic layer (mocked) validates the French claims against the English evidence
-    vi.mocked(callLLM).mockResolvedValue({
-      data: {
-        verdicts: [
-          { claimId: "summary", verdict: "supported" },
-          { claimId: "exp.e1.1", verdict: "supported" },
-          { claimId: "exp.e1.2", verdict: "supported" },
-          { claimId: "edu.ed1", verdict: "supported" },
-          { claimId: "cert.c1", verdict: "supported" },
-        ],
-      },
-      usage: { promptTokens: 1, completionTokens: 1, costUsd: 0 },
-      modelUsed: "test/economy",
-    } as never);
-
-    const report = await runFactGuard({
-      userId: "u-test",
-      content,
-      snapshot,
-      matchReport: reportFixture(),
-      settings: SETTINGS("fr"),
-      runId: "run-lang",
-      checkCancelled: vi.fn(),
-      draftWarnings: warnings,
+    expect(warnings).toContainEqual({
+      code: "UNCERTAIN_TRANSLATION",
+      claim: "exp.e1.1",
+      severity: "warning",
+      resolution: "pending",
     });
-
-    expect(report.layersRun).toEqual({ deterministic: true, semantic: true });
-    expect(report.flags).toContainEqual(
-      expect.objectContaining({ code: "VERBATIM_FALLBACK", claim: "exp.e1.2", severity: "warning" }),
-    );
-    expect(report.flags).toContainEqual(
-      expect.objectContaining({ code: "UNCERTAIN_TRANSLATION", claim: "exp.e1.1", severity: "warning" }),
-    );
-    expect(report.summary).toEqual({ blockers: 0, warnings: 2 }); // warnings inform, never block
-
-    // the semantic layer received the settings' outputLanguage and the source-language evidence
-    const guardPayload = vi.mocked(callLLM).mock.calls.find((c) => c[0].task === "factGuard")![0]
-      .payload as { outputLanguage: string; claims: Array<{ claimId: string; text: string; evidenceText: string[] }> };
-    expect(guardPayload.outputLanguage).toBe("fr");
-    const e1 = guardPayload.claims.find((c) => c.claimId === "exp.e1.1")!;
-    expect(e1.text).toContain("2M requêtes");
-    expect(e1.evidenceText.join(" ")).toContain("2M requests"); // EN evidence behind the FR claim
   });
 });
 
-// --- Numeric identity (identical rule for FR and EN — FR-015) ---
+// --- Language-agnostic normalization ---
 
-describe("numeric identity across languages", () => {
-  it("numericTokens extract identical digit tokens from FR and EN phrasings under normalizeText", () => {
-    const fr = numericTokens("Dirigé une équipe de 12 personnes pendant 5 ans avec 99,9 % de disponibilité.");
-    const en = numericTokens("Led a team of 12 for 5 years with 99.9% availability.");
-    expect([...new Set(fr)].sort()).toEqual([...new Set(en)].sort()); // "5", "12", "99", "9"
-  });
-
-  it("the deterministic layer validates an FR claim against EN evidence by numbers alone", () => {
-    const snapshot = snapshotFixture();
-    const claims = [
-      {
-        claimId: "exp.e1.1",
-        text: "Exploitation de clusters Kubernetes servant 2M requêtes par jour.",
-        evidenceIds: ["b1"],
-        evidenceTexts: ["Operated Kubernetes clusters serving 2M requests per day."],
-        danglingIds: [],
-      },
-    ];
-    const ok = runDeterministicLayer({ claims, skills: ["Kubernetes"], snapshot, matchReport: reportFixture() });
-    expect(ok.filter((f) => f.code === "NUMERIC_MISMATCH")).toEqual([]);
-
-    // an invented number fires identically in either language
-    const inventedFr = runDeterministicLayer({
-      claims: [{ ...claims[0], text: "Exploitation de clusters servant 3M requêtes par jour." }],
-      skills: [],
-      snapshot,
-      matchReport: reportFixture(),
-    });
-    const inventedEn = runDeterministicLayer({
-      claims: [{ ...claims[0], text: "Operated clusters serving 3M requests per day." }],
-      skills: [],
-      snapshot,
-      matchReport: reportFixture(),
-    });
-    expect(inventedFr).toContainEqual(expect.objectContaining({ code: "NUMERIC_MISMATCH", severity: "blocker" }));
-    expect(inventedEn).toContainEqual(expect.objectContaining({ code: "NUMERIC_MISMATCH", severity: "blocker" }));
-  });
-
+describe("normalization across languages", () => {
   it("normalizeText is language-agnostic for accented FR metric text", () => {
     expect(normalizeText("Réduction de 60 %")).toContain("60");
     expect(normalizeText("réduction de 60 %")).toBe(normalizeText("Reduction de 60 %"));

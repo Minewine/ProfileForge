@@ -45,7 +45,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const omissions: Omission[] = parsed.data.omissions.map((o) =>
       o.id === omissionId ? { ...o, restoredMustInclude: true } : o,
     );
-    await updateVersionContent(version.id, { content: { ...parsed.data, omissions } });
+    await updateVersionContent(version.id, { ...parsed.data, omissions });
     return NextResponse.json({ omissions });
   } catch (err) {
     return errorResponse(err);

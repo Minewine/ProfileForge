@@ -22,12 +22,14 @@ Status legend: **Spec only** (described in the master spec, no `specs/NNN` direc
 |---|---|---|---|---|
 | 001-ats-cv-tailoring | ATS-Optimized CV & Cover Letter Tailoring (MVP, FR/EN) | Implemented | 41/41 | `src/app/api/cv/*`, `src/lib/parsing/`, `src/lib/validation/sourceContainment.ts`, `/upload` page |
 | 002-jd-matching | JD Analysis & Deterministic Matching | Implemented | 29/29 | `src/app/api/jobs/*`, `src/lib/matching/` (exact → alias → evidence-validated semantic), MatchReport stored on `JobAnalysis` |
-| 003-cv-generation | Evidence-Aware CV & Letter Generation (Fact Guard + ATS Export) | Implemented | 54/54 | `src/lib/generation/pipeline.ts` (7-stage async), `factguard.ts`, `render/`, `verify.ts` extraction gate, `/api/generations/*` |
+| 003-cv-generation | Evidence-Aware CV & Letter Generation (JD-tailored prompts + ATS Export) | Implemented | 54/54 | `src/lib/generation/pipeline.ts` (6-stage async: preconditions, plan, draft, render, gate, persist), `plan.ts` (JD text into the draft prompts), `render/`, `verify.ts` extraction gate, `/api/generations/*`. Fact Guard removed 2026-10-28 — warnings-only report, no claim resolution |
 | 004-profile-editing-e2e | Profile Editing End-to-End Test Suite | Implemented | 19/19 | `tests/e2e/` — 13 specs / 46 tests against an isolated `profileforge_e2e` database |
 | 005-cv-selection-refinement | Explicit, Evidence-Backed Selection & Rewriting | Implemented | 32/32 | `SelectionRecord` (`generation/schemas.ts`), selection cut in `plan.ts`, omissions list + restore route |
-| 006-polish-reliability | Polish & Reliability Slice | Implemented | 17/17 | `client-messages.ts`, generation progress + disabled-with-reason controls, fail-closed Fact Guard UX |
+| 006-polish-reliability | Polish & Reliability Slice | Implemented | 17/17 | `client-messages.ts`, generation progress + disabled-with-reason controls (Fact Guard UX removed 2026-10-28 with the guard itself; downloads gate only on the extraction check) |
 | 007-fix-profile-editor-crud | Fix Profile Editor CRUD | Implemented | 41/41 | `profile-view.tsx` debounced autosave, `profile/entries/*` routes, `MergeOrKeepDialog` |
 | 008-multi-user-isolation | Multi-User Support with Per-User Isolation | Implemented | 43/43 | auth routes + `src/lib/auth/` (Argon2id, hashed session tokens), `userId` scoping in every repository, per-user settings/keys, e2e specs 11–13 |
+| 009-evaluation-benchmark | Evaluation Benchmark (master-spec Evaluation module) | Implemented *(2026-10-28 addendum)* | 38/38 | `src/lib/benchmark/*`, `scripts/run-benchmark.ts`, `benchmarks/` (fixtures, baselines, transcripts); see [specs/009-evaluation-benchmark](specs/009-evaluation-benchmark) |
+| — (master spec §3) | ~~**Evaluation benchmark** (`runBenchmark`)~~ | **→ shipped as 009** | — | see row above |
 | — (master spec §3) | **Evaluation benchmark** (`runBenchmark`) | **Spec only** | none | no `specs/009-*`, no benchmark code or tests |
 
 No slice sits in "Planned" or "Tasks exist" state: every feature with a `specs/` directory is fully
@@ -46,10 +48,11 @@ CV (PDF/DOCX ≤ 10 MB; scanned/image-only files rejected) → parse with your o
 review the parsed draft → import into the profile with bullet-level provenance → edit everything
 (debounced autosave, version history with restore, duplicate-skill merge-or-keep) → paste a job
 description → extract requirements → run the deterministic match (60/30/10 score, exact → approved
-alias → evidence-validated semantic) → launch async generation → review the selection record and
-omissions → resolve Fact Guard flags (edits, removals, or explicit confirmations that persist
-across regenerations) → gated download** (extraction-verified PDF; best-effort template-matched CV
-DOCX; copyable plain-text letter). Multi-user isolation works throughout, including claiming
+alias → evidence-validated semantic) → launch async generation → review the selection record,
+omissions, and provenance → download** (extraction-verified PDF; best-effort template-matched CV
+DOCX; copyable plain-text letter). The draft LLM receives the full job description and rewords the
+content toward it under the zero-invention rules (Fact Guard claim resolution was removed
+2026-10-28). Multi-user isolation works throughout, including claiming
 quarantined pre-multi-user data via `npm run db:assign-owner`.
 
 Evidence:

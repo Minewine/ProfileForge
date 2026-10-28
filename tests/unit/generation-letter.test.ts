@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { EvidenceRef, MatchReport, RequirementMatch } from "@/lib/jobs/schemas";
 import { buildLetterPlan, LETTER_MAX_WORDS, type PinnedSnapshot } from "@/lib/generation/plan";
 import { buildLetterTaskPayload, mergeKeyedLetterDraft } from "@/lib/generation/draft";
-import { checkLetterComplementarity } from "@/lib/generation/factguard";
 import { fitLetterToBudget } from "@/lib/generation/fit";
 import { renderLetter } from "@/lib/generation/render/letter";
 import { letterClaimId, type CoverLetterContent, type GenerationSettings } from "@/lib/generation/schemas";
@@ -162,24 +161,6 @@ describe("mergeKeyedLetterDraft (keyed merge, R7 rules)", () => {
       uncertainTranslations: [{ key: plan.items[0]!.key, note: "credential name" }, { key: "letter.99", note: "unknown" }],
     });
     expect(warnings.filter((w) => w.code === "UNCERTAIN_TRANSLATION")).toHaveLength(1);
-  });
-});
-
-describe("checkLetterComplementarity (LETTER_DUPLICATES_CV, deterministic)", () => {
-  it("flags a paragraph that verbatim-reuses a CV bullet", () => {
-    const cvTexts = ["Operated Kubernetes clusters serving 2M requests per day."];
-    const flags = checkLetterComplementarity(
-      [{ claimId: "letter.1", text: "Operated Kubernetes clusters serving 2M requests per day." }],
-      cvTexts,
-    );
-    expect(flags).toHaveLength(1);
-    expect(flags[0]).toMatchObject({ code: "LETTER_DUPLICATES_CV", claim: "letter.1", severity: "blocker" });
-  });
-
-  it("does not flag clearly distinct paragraphs or run against an absent CV", () => {
-    const cvTexts = ["Operated Kubernetes clusters serving 2M requests per day."];
-    expect(checkLetterComplementarity([{ claimId: "letter.1", text: "I want to bring my platform experience to your team." }], cvTexts)).toHaveLength(0);
-    expect(checkLetterComplementarity([{ claimId: "letter.1", text: "Anything at all." }], [])).toHaveLength(0);
   });
 });
 

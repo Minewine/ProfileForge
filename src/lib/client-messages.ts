@@ -1,13 +1,12 @@
 /**
  * Shared client-safe message maps (feature 006, research R6): action pointers
- * for AI/pipeline failure codes and one-sentence explanations for Fact Guard
- * flag kinds. Pure data + string functions, ZERO imports — safe for client
+ * for AI/pipeline failure codes and one-sentence explanations for draft warning
+ * codes. Pure data + string functions, ZERO imports — safe for client
  * components (the no-`node:`-imports convention documented in
  * GenerationPanel.tsx). Server message text stays the single source of truth;
  * these maps add only the *what to do next* layer, keyed by code.
  *
- * Contracts: specs/006-polish-reliability/contracts/error-messages.md,
- * specs/006-polish-reliability/contracts/fact-guard-ux.md
+ * Contract: specs/006-polish-reliability/contracts/error-messages.md
  * (tests/unit/client-messages.test.ts guards completeness — a new code without
  * an entry here fails CI).
  */
@@ -26,19 +25,10 @@ const JOB_ERROR_GUIDANCE: Record<string, string> = {
   EXPORT_GATE_FAILED: "Regenerate to retry the export.",
 };
 
-/** One-sentence, plain-language explanations per flag kind (Fact Guard UX).
- *  Inventory = exactly the ValidationFlag codes emitted by the generation
- *  Fact Guard + draft merge (SKILL_UNVERIFIED included; INCONSISTENT_STATE is
- *  a profile-claims code, not a generation flag — deliberately absent). */
+/** One-sentence, plain-language explanations per draft warning kind.
+ *  Inventory = exactly the ValidationFlag codes emitted by the draft merge
+ *  since the Fact Guard removal (warnings only). */
 export const FLAG_EXPLANATIONS: Record<string, string> = {
-  NUMERIC_MISMATCH: "A number in this claim doesn't match your profile evidence — fix it or confirm the correct figure.",
-  MEANING_DRIFT:
-    "This claim appears to say more than your profile evidence supports — tighten it, remove it, or confirm it's accurate.",
-  UNSUPPORTED_CLAIM: "Your profile has no evidence backing this claim — add evidence in the profile, remove it, or confirm it.",
-  DANGLING_PROVENANCE: "This claim points to profile content that no longer exists — re-match the job, edit the claim, or remove it.",
-  LETTER_DUPLICATES_CV: "This sentence repeats your CV almost word for word — rephrase it in the letter.",
-  SKILL_UNVERIFIED:
-    "This skill isn't in your profile or the matched requirements — add it to the profile or re-run the match, then regenerate.",
   VERBATIM_FALLBACK:
     "The AI didn't rewrite this item, so the original source wording is used (it may not match the output language) — edit it or regenerate.",
   UNCERTAIN_TRANSLATION: "The AI wasn't sure about this translation — double-check the wording.",

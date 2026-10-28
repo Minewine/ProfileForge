@@ -143,6 +143,7 @@ export function buildTaskPayload(plan: CVPlan, settings: GenerationSettings) {
       plan.jdDigest.role !== null
         ? { role: plan.jdDigest.role, keywords: plan.jdDigest.keywords }
         : { keywords: plan.jdDigest.keywords },
+    ...(plan.jdText ? { jobDescription: plan.jdText } : {}),
     pageBudget: settings.pageBudget,
   };
 }
@@ -237,6 +238,7 @@ export function buildLetterTaskPayload(
       keywords: plan.jdDigest.keywords,
       topRequirements: plan.jdDigest.topRequirements,
     },
+    ...(plan.jdText ? { jobDescription: plan.jdText } : {}),
     maxWords: plan.maxWords,
   };
 }

@@ -264,13 +264,19 @@ describe("task payload schema conformance (review regression)", () => {
     expect(GenerateCoverLetterInputSchema.parse(payload)).toBeDefined();
   });
 
-  it("the factGuard payload parses against FactGuardInputSchema", async () => {
-    const { FactGuardInputSchema } = await import("@/lib/llm/tasks/factguard");
-    const payload = {
+  it("the CV payload carries the capped job description when the plan has one", async () => {
+    const { GenerateTailoredCVInputSchema } = await import("@/lib/llm/tasks/generatetailoredcv");
+    const { buildTaskPayload } = await import("@/lib/generation/draft");
+    const plan = planFixture([item({ key: "exp.e1.1", kind: "experience", entryId: "e1" })]);
+    plan.jdText = "You will build distributed systems with Kubernetes.";
+    const payload = buildTaskPayload(plan, {
       outputLanguage: "en",
-      claims: [{ claimId: "summary", text: "Experienced platform engineer.", evidenceText: ["10 years of platforms."] }],
-    };
-    expect(FactGuardInputSchema.parse(payload)).toBeDefined();
+      pageBudget: 2,
+      tone: "professional",
+      summaryMaxWords: 60,
+    });
+    expect(payload.jobDescription).toBe(plan.jdText);
+    expect(GenerateTailoredCVInputSchema.parse(payload)).toBeDefined();
   });
 });
 

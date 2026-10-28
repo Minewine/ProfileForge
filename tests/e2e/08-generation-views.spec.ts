@@ -48,17 +48,14 @@ test.describe("Feature 005 — selection & rewriting views", () => {
     await expect(page.getByText("selection", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Restore", exact: true })).toBeVisible();
 
-    // Feature 006 US2 — blocked exports explain themselves: the gate block names
-    // the blocker count and the unlock action, and the flag row carries the
-    // one-sentence NUMERIC_MISMATCH explanation beside its code.
-    await expect(page.getByText("Claims need review first")).toBeVisible();
-    const gateBlock = page.locator("div", { hasText: "Claims need review first" }).filter({ hasText: "Downloads unlock" });
-    await expect(gateBlock.first()).toBeVisible();
-    await expect(gateBlock.first()).toContainText("1 claim");
+    // Fact Guard removal — the report is warnings-only: the seeded draft
+    // fallback renders as a passive "Draft notes" block, never a download gate.
+    await expect(page.getByText("Draft notes (1)")).toBeVisible();
+    await expect(page.getByText("VERBATIM_FALLBACK", { exact: true })).toBeVisible();
     await expect(
-      page.getByText("A number in this claim doesn't match your profile evidence — fix it or confirm the correct figure."),
+      page.getByText("The AI didn't rewrite this item, so the original source wording is used (it may not match the output language) — edit it or regenerate."),
     ).toBeVisible();
-    await expect(page.getByText("NUMERIC_MISMATCH", { exact: true })).toBeVisible();
+    await expect(page.getByText("Claims need review first")).toHaveCount(0);
 
     // Feature-005 settings controls render: summary length, template, DE output.
     await expect(page.getByLabel("Summary length (CV)")).toBeVisible();

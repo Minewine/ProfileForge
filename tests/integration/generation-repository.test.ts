@@ -8,7 +8,6 @@ import {
   appendVersion,
   createGenerationJob,
   ensureDocument,
-  findConfirmedFingerprints,
   getCurrentVersion,
   getDocumentSummary,
   getJob,
@@ -20,17 +19,12 @@ import {
   markFailed,
   markRunning,
   markSucceeded,
-  recordConfirmation,
   retryJob,
   setCancelRequested,
   updateVersionContent,
   upsertJobVersion,
 } from "@/lib/generation/repository";
-import {
-  claimFingerprint,
-  resolveGenerationSettings,
-  type GenerationSettings,
-} from "@/lib/generation/schemas";
+import { resolveGenerationSettings, type GenerationSettings } from "@/lib/generation/schemas";
 import { resetAuth, signIn, type SessionUser } from "../support/auth";
 
 const JD = `Senior Backend Engineer. We require strong experience in distributed systems.
@@ -59,7 +53,6 @@ function reportFixture(overrides: Partial<MatchReport> = {}): MatchReport {
 }
 
 const cleanReport = {
-  layersRun: { deterministic: true as const, semantic: true },
   flags: [],
   summary: { blockers: 0, warnings: 0 },
 };
@@ -130,21 +123,12 @@ describe("createGenerationJob guards", () => {
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
-  it("refuses PROFILE_DATES_CONFLICT while the profile has overlapping experience dates", async () => {
+  it("creates a job despite overlapping experience dates (no blocking guard)", async () => {
     const analysisId = await matchedAnalysisId();
     const profile = await getOrCreateProfile(user.id);
     await addExperience(profile.id, "A", "2020-01", "2021-01");
     await addExperience(profile.id, "B", "2020-06", "2022-01"); // overlaps A
 
-    await expect(
-      createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() }),
-    ).rejects.toMatchObject({ code: "PROFILE_DATES_CONFLICT" });
-
-    // resolving the overlap (shifting B after A) unblocks creation
-    await db.experience.updateMany({
-      where: { company: "B", profileId: profile.id },
-      data: { startDate: "2021-02", endDate: "2022-01" },
-    });
     const job = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
     expect(job.status).toBe("queued");
   });
@@ -322,7 +306,6 @@ describe("documents & versions", () => {
     const { document } = await seededJob(analysisId);
     const again = await ensureDocument(analysisId, "cv");
     expect(again.id).toBe(document.id);
-    expect(again.confirmations).toEqual([]);
 
     const letter = await ensureDocument(analysisId, "cover_letter");
     expect(letter.id).not.toBe(document.id);
@@ -363,7 +346,7 @@ describe("documents & versions", () => {
     ).rejects.toMatchObject({ code: "GENERATION_INVALID_STATE" });
   });
 
-  it("updateVersionContent bumps revision (claim edits only)", async () => {
+  it("updateVersionContent bumps revision (omission-restore rewrites)", async () => {
     const analysisId = await matchedAnalysisId();
     const { job, document } = await seededJob(analysisId);
     const v1 = await appendVersion({
@@ -373,26 +356,9 @@ describe("documents & versions", () => {
       validationReport: cleanReport,
     });
 
-    const edited = await updateVersionContent(v1.id, {
-      content: { claimIdVersion: 1, summary: "new" },
-      validationReport: { ...cleanReport, flags: [], summary: { blockers: 0, warnings: 1 } },
-    });
+    const edited = await updateVersionContent(v1.id, { claimIdVersion: 1, summary: "new" });
     expect(edited.revision).toBe(1);
     expect(edited.content).toMatchObject({ summary: "new" });
-    expect((await updateVersionContent(v1.id, {})).revision).toBe(2);
-  });
-
-  it("records and looks up confirmation fingerprints", async () => {
-    const analysisId = await matchedAnalysisId();
-    const { document } = await seededJob(analysisId);
-    expect(await findConfirmedFingerprints(document.id)).toEqual([]);
-
-    const fp = claimFingerprint("Led a team of 5", ["b1"]);
-    await recordConfirmation(document.id, { fingerprint: fp, confirmedAt: "2026-10-22T00:00:00.000Z" });
-    await recordConfirmation(document.id, { fingerprint: fp, confirmedAt: "2026-10-22T00:00:00.000Z" }); // idempotent
-    const found = await findConfirmedFingerprints(document.id);
-    expect(found).toHaveLength(1);
-    expect(found[0]).toEqual({ fingerprint: fp, confirmedAt: "2026-10-22T00:00:00.000Z" });
   });
 
   it("aggregates usage by runId from LlmUsageLog", async () => {
@@ -426,32 +392,31 @@ describe("documents & versions", () => {
       version: null,
     });
 
-    // blocked version: pending blocker keeps every format closed
+    // artifacts + passed extraction open the formats; the report never gates
     await appendVersion({
       documentId: document.id,
       producingJobId: job.id,
       content: { claimIdVersion: 1 },
       validationReport: {
-        layersRun: { deterministic: true, semantic: true },
         flags: [
           {
-            code: "NUMERIC_MISMATCH",
+            code: "VERBATIM_FALLBACK",
             claim: "exp.e1.1",
-            severity: "blocker",
+            severity: "warning",
             resolution: "pending",
           },
         ],
-        summary: { blockers: 1, warnings: 0 },
+        summary: { blockers: 0, warnings: 1 },
       },
       artifacts: [{ format: "pdf", storagePath: "x.pdf", sha256: "a", bytes: 1, gate: "verified" }],
       extractionCheck: { passed: true },
     });
-    const blocked = (await getDocumentSummary(document.id))!;
-    expect(blocked.currentVersion).toBe(1);
-    expect(blocked.summary).toEqual({ blockers: 1, warnings: 0 });
-    expect(blocked.downloadable).toEqual({ pdf: false, docx: false, txt: false });
+    const open = (await getDocumentSummary(document.id))!;
+    expect(open.currentVersion).toBe(1);
+    expect(open.summary).toEqual({ blockers: 0, warnings: 1 });
+    expect(open.downloadable).toEqual({ pdf: true, docx: false, txt: false });
 
-    // clean version with a verified pdf artifact + passed extraction opens pdf only
+    // a failed extraction check keeps the pdf closed even with artifacts
     const job2 = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
     await appendVersion({
       documentId: document.id,
@@ -462,24 +427,11 @@ describe("documents & versions", () => {
         { format: "pdf", storagePath: "x.pdf", sha256: "a", bytes: 1, gate: "verified" },
         { format: "docx", storagePath: "x.docx", sha256: "a", bytes: 1, gate: "best_effort" },
       ],
-      extractionCheck: { passed: true },
+      extractionCheck: { passed: false },
     });
-    const open = (await getDocumentSummary(document.id))!;
-    expect(open.currentVersion).toBe(2);
-    expect(open.downloadable).toEqual({ pdf: true, docx: true, txt: false });
-
-    // fail-closed: semantic layer not run ⇒ everything closed even with zero flags
-    const job3 = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
-    await appendVersion({
-      documentId: document.id,
-      producingJobId: job3.id,
-      content: { claimIdVersion: 1 },
-      validationReport: { layersRun: { deterministic: true, semantic: false }, flags: [], summary: { blockers: 0, warnings: 0 } },
-      artifacts: [{ format: "pdf", storagePath: "x.pdf", sha256: "a", bytes: 1, gate: "verified" }],
-      extractionCheck: { passed: true },
-    });
-    const closed = (await getDocumentSummary(document.id))!;
-    expect(closed.downloadable).toEqual({ pdf: false, docx: false, txt: false });
+    const gated = (await getDocumentSummary(document.id))!;
+    expect(gated.currentVersion).toBe(2);
+    expect(gated.downloadable).toEqual({ pdf: false, docx: true, txt: false });
   });
 
   it("cascades delete with the analysis", async () => {

@@ -326,18 +326,17 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     generatedAt: new Date().toISOString(),
   };
   const validationReport = {
-    layersRun: { deterministic: true, semantic: true },
-    // feature 006 US2 fixture: one pending blocker so the blocked-export views
-    // (gate explanation, flag explanation) render end-to-end
+    // warnings-only report (Fact Guard removed): a draft fallback warning the
+    // UI renders passively
     flags: [
       {
-        code: "NUMERIC_MISMATCH",
-        claim: `exp.${firstExpId}.1`,
-        severity: "blocker",
+        code: "VERBATIM_FALLBACK",
+        claim: `exp.${firstExpId}.2`,
+        severity: "warning",
         resolution: "pending",
       },
     ],
-    summary: { blockers: 1, warnings: 0 },
+    summary: { blockers: 0, warnings: 1 },
   };
   const extractionCheck = {
     passed: true,
@@ -357,11 +356,10 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       version,
       JSON.stringify(matchReport),
     ]);
-    await gen.query('INSERT INTO "GeneratedDocument" (id, "analysisId", kind, confirmations, "createdAt", "updatedAt") VALUES ($1,$2,$3,$4,now(),now())', [
+    await gen.query('INSERT INTO "GeneratedDocument" (id, "analysisId", kind, "createdAt", "updatedAt") VALUES ($1,$2,$3,now(),now())', [
       documentId,
       analysisId,
       "cv",
-      "[]",
     ]);
     await gen.query(
       'INSERT INTO "GenerationJob" (id, "analysisId", kind, settings, status, attempt, "profileVersion", "runId", "createdAt", "updatedAt") VALUES ($1,$2,$3,$4,$5,1,$6,$7,now(),now())',

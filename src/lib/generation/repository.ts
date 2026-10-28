@@ -2,12 +2,11 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { ApiError } from "@/lib/api/errors";
-import { findDateOverlapConflict, getOrCreateProfile } from "@/lib/profile/repository";
+import { getOrCreateProfile } from "@/lib/profile/repository";
 import {
   ArtifactMetaSchema,
   ValidationReportSchema,
   type ArtifactMeta,
-  type ClaimFingerprint,
   type GenerationKind,
   type GenerationSettings,
   type ValidationReport,
@@ -33,14 +32,6 @@ export async function createGenerationJob(userId: string, input: {
   }
 
   const profile = await getOrCreateProfile(userId);
-  const conflict = await findDateOverlapConflict(profile.id);
-  if (conflict) {
-    throw new ApiError(
-      "PROFILE_DATES_CONFLICT",
-      "The profile has overlapping experience dates, so a tailored CV cannot be generated. Open the Profile editor and adjust the flagged Start/End dates (each role needs its own period), then generate again.",
-      conflict,
-    );
-  }
 
   return db.generationJob.create({
     data: {
@@ -317,33 +308,14 @@ export async function upsertJobVersion(input: {
   return appendVersion(input);
 }
 
-/** Claim resolution edits: rewrite content/validationReport, bump revision. */
-export async function updateVersionContent(
-  versionId: string,
-  patch: { content?: unknown; validationReport?: unknown },
-) {
+/** Omission-restore persistence: rewrite the version's content (revision bumps
+ *  so the deliverable-state change is observable). */
+export async function updateVersionContent(versionId: string, content: unknown) {
   const existing = await db.generatedDocumentVersion.findUnique({ where: { id: versionId } });
   if (!existing) throw new ApiError("NOT_FOUND", "Document version not found.");
   return db.generatedDocumentVersion.update({
     where: { id: versionId },
-    data: {
-      revision: { increment: 1 },
-      ...(patch.content !== undefined ? { content: patch.content as object } : {}),
-      ...(patch.validationReport !== undefined
-        ? { validationReport: patch.validationReport as object }
-        : {}),
-    },
-  });
-}
-
-/** Confirmations rewrite only the report — no revision bump (data-model:
- *  confirm sets resolution, nothing else). */
-export async function setVersionValidationReport(versionId: string, validationReport: unknown) {
-  const existing = await db.generatedDocumentVersion.findUnique({ where: { id: versionId } });
-  if (!existing) throw new ApiError("NOT_FOUND", "Document version not found.");
-  return db.generatedDocumentVersion.update({
-    where: { id: versionId },
-    data: { validationReport: validationReport as object },
+    data: { revision: { increment: 1 }, content: content as object },
   });
 }
 
@@ -363,32 +335,6 @@ export async function setVersionArtifacts(
       ...(patch.extractionCheck !== undefined ? { extractionCheck: patch.extractionCheck as object } : {}),
     },
   });
-}
-
-// --- Confirmation fingerprints (carried across versions, R10) ---
-
-export async function recordConfirmation(documentId: string, entry: ClaimFingerprint) {
-  const document = await db.generatedDocument.findUnique({ where: { id: documentId } });
-  if (!document) throw new ApiError("NOT_FOUND", "Generated document not found.");
-  const current = parseFingerprints(document.confirmations);
-  if (current.some((f) => f.fingerprint === entry.fingerprint)) return current; // idempotent
-  const next = [...current, entry];
-  await db.generatedDocument.update({
-    where: { id: documentId },
-    data: { confirmations: next as unknown as object[] },
-  });
-  return next;
-}
-
-export async function findConfirmedFingerprints(documentId: string): Promise<ClaimFingerprint[]> {
-  const document = await db.generatedDocument.findUnique({ where: { id: documentId } });
-  if (!document) return [];
-  return parseFingerprints(document.confirmations);
-}
-
-function parseFingerprints(value: unknown): ClaimFingerprint[] {
-  const parsed = z.array(z.object({ fingerprint: z.string(), confirmedAt: z.string() })).safeParse(value);
-  return parsed.success ? parsed.data : [];
 }
 
 // --- Usage aggregation (per runId) ---
@@ -488,9 +434,10 @@ function reportSummary(version: { validationReport: unknown } | null): {
   return parseReport(version)?.summary ?? { blockers: 0, warnings: 0 };
 }
 
-/** Live download-gate matrix (data-model.md): no pending blockers, semantic layer
- *  run (fail-closed, FR-010), artifact present — and pdf additionally gate-verified.
- *  Exported for the document/download routes. */
+/** Live download-gate matrix: artifacts present — pdf additionally
+ *  extraction-gate-verified. The validation report (warnings-only since the
+ *  Fact Guard removal) is informational and gates nothing. Exported for the
+ *  document/download routes. */
 export function computeDownloadable(version: {
   validationReport: unknown;
   artifacts: unknown;
@@ -498,12 +445,6 @@ export function computeDownloadable(version: {
 } | null): { pdf: boolean; docx: boolean; txt: boolean } {
   const closed = { pdf: false, docx: false, txt: false };
   if (!version) return closed;
-  const report = ValidationReportSchema.safeParse(version.validationReport);
-  if (!report.success) return closed;
-  if (!report.data.layersRun.semantic) return closed;
-  if (report.data.flags.some((f) => f.severity === "blocker" && f.resolution === "pending")) {
-    return closed;
-  }
   const artifacts = z.array(ArtifactMetaSchema).catch([]).parse(version.artifacts ?? []);
   const has = (format: ArtifactMeta["format"]) => artifacts.some((a) => a.format === format);
   const extraction = version.extractionCheck as { passed?: boolean } | null;

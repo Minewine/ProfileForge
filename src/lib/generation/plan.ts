@@ -443,6 +443,9 @@ export type CVPlan = {
    *  foreground (feature 005 US3) — different reports ⇒ different summaries. */
   summaryRequirements: string[];
   jdDigest: { role: string | null; keywords: string[] };
+  /** Capped raw job-description text (prompt-tailoring input; set by the plan
+   *  stage, absent on hand-built plans). Absent ⇒ the draft sees only the digest. */
+  jdText?: string;
   mustIncludeKeys: string[];
   /** Restored skill omissions (US5) — exempt from the fit loop's Tier-3 skill
    *  demotion, so a restored skill is never silently re-omitted (SC-006). */
@@ -880,6 +883,8 @@ export type LetterPlan = {
   kind: "letter";
   items: LetterPlanItem[];
   jdDigest: { role: string | null; keywords: string[]; topRequirements: string[] };
+  /** Capped raw job-description text (prompt-tailoring input; set by the plan stage). */
+  jdText?: string;
   maxWords: number;
 };
 
@@ -1012,6 +1017,10 @@ export function buildLetterPlan(args: {
 
 // --- Stage runners (wired by pipeline.ts buildStages) ---
 
+/** Cap on the raw JD text handed to the draft prompts: JDs may be 100k chars,
+ *  but the premium draft call only needs the description's substance. */
+export const MAX_JD_PROMPT_CHARS = 12_000;
+
 /** Load the pinned ProfileSnapshot data for a version: the live profile when it
  *  has not been mutated since pinning (any mutation bumps the version), else the
  *  stored snapshot row (research R5). Shared by the pipeline preconditions stage
@@ -1061,15 +1070,22 @@ export async function runPreconditionsStage(ctx: StageContext): Promise<void> {
 /** Stage 2 — content plan: deterministic ranking + skills list + must-include set
  *  (cv), or the angle-keyed letter plan (cover_letter, US6). For letters the
  *  current CV version's bullet/summary texts are loaded as anti-repetition
- *  input (research R11): the LLM avoids them and the Fact Guard's
- *  LETTER_DUPLICATES_CV check runs against them. */
+ *  input (research R11): the LLM avoids them. */
 export async function runPlanStage(ctx: StageContext): Promise<void> {
   if (!ctx.pinnedSnapshot || !ctx.matchReport) {
     throw new Error("Plan stage requires the preconditions stage output.");
   }
+  // Raw JD text for the draft prompts (prompt-tailoring): the digest alone
+  // (keywords + top-5 requirements) under-specifies the wording the model
+  // should mirror, so the full description is capped and attached to the plan.
+  const analysis = await db.jobAnalysis.findUnique({
+    where: { id: ctx.analysisId },
+    select: { jdText: true },
+  });
+  const jdText = analysis?.jdText.slice(0, MAX_JD_PROMPT_CHARS);
 
   if (ctx.kind === "cover_letter") {
-    ctx.plan = buildLetterPlan({ snapshot: ctx.pinnedSnapshot, report: ctx.matchReport, now: new Date() });
+    ctx.plan = { ...buildLetterPlan({ snapshot: ctx.pinnedSnapshot, report: ctx.matchReport, now: new Date() }), ...(jdText ? { jdText } : {}) };
     ctx.letterCvTexts = await currentCvTexts(ctx.analysisId);
     return;
   }
@@ -1098,7 +1114,7 @@ export async function runPlanStage(ctx: StageContext): Promise<void> {
     now: new Date(),
     pageBudget: ctx.settings.pageBudget, // feature 005: scales the per-section caps
   });
-  ctx.plan = plan;
+  ctx.plan = { ...plan, ...(jdText ? { jdText } : {}) };
   ctx.selection = plan.selection ?? null; // the record the same cut produced (null for letters)
 }
 

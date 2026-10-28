@@ -78,7 +78,7 @@ model SourceDocument {
 
 model Profile {
   id        String   @id @default(cuid())
-  userId    String? // null = quarantined legacy row (pre-multi-user); claimed by scripts/assign-owner.ts
+  userId    String? @unique // null = quarantined legacy row (pre-multi-user); claimed by scripts/assign-owner.ts. Nullable unique: Postgres allows many NULL rows.
   version   Int      @default(1)
   language  String // "fr" | "en"
   basics    Json? // { name, headline?, summary?, location?, email?, phone?, links? }
@@ -94,8 +94,6 @@ model Profile {
   snapshots      ProfileSnapshot[]
 
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
 }
 
 model Experience {
@@ -381,7 +379,6 @@ model GeneratedDocument {
   id            String   @id @default(cuid())
   analysisId    String
   kind          String // "cv" | "cover_letter"
-  confirmations Json     @default("[]") // ClaimFingerprint[] — grows as users confirm; pruned never
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -398,8 +395,8 @@ model GeneratedDocumentVersion {
   producingJobId   String   @unique // one version per successful job
   content          Json // GeneratedCVContent | CoverLetterContent (incl. omissions + provenance)
   selection        Json? // SelectionRecord — which entries were selected and why (feature 005; null for pre-feature versions)
-  validationReport Json // ValidationReport — rewritten on claim edits
-  revision         Int      @default(0) // bumped on each claim edit/remove (confirm does not bump)
+  validationReport Json // ValidationReport — warnings-only (Fact Guard removed); informational
+  revision         Int      @default(0) // bumped on omission-restore content rewrites
   artifacts        Json     @default("[]") // ArtifactMeta[]
   extractionCheck  Json? // full two-level gate result for the PDF
   createdAt        DateTime @default(now())

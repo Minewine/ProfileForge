@@ -1,5 +1,11 @@
 # Contract — Fact Guard UX: Blocked Exports & Flag Explanations
 
+> **DEPRECATED (2026-10-28)**: the Fact Guard UX was removed with the Fact Guard
+> itself — no blockers, no claim review, no confirmation flows. Draft warnings
+> (VERBATIM_FALLBACK / UNCERTAIN_TRANSLATION) render as a passive "Draft notes"
+> block; downloads are gated only by artifacts + the PDF extraction check. This
+> document remains for historical context only.
+
 **Feature**: 006-polish-reliability (US2, FR-005–FR-007; SC-002) · **Date**: 2026-10-25
 
 The guard's *semantics are frozen* (fail-closed, inherited from 003): this contract pins

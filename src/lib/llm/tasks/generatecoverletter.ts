@@ -23,6 +23,8 @@ export const GenerateCoverLetterInputSchema = z.object({
     company: z.string().optional(),
     topRequirements: z.array(z.string()),
   }),
+  /** Capped raw job-description text — the primary wording target. */
+  jobDescription: z.string().min(1).optional(),
   maxWords: z.number().int().min(1).max(1000),
 });
 
@@ -41,6 +43,7 @@ const LANGUAGE_NAMES = { fr: "French", en: "English", de: "German" } as const;
 const SYSTEM_PROMPT = `You draft a cover letter from a deterministic, evidence-keyed paragraph plan.
 Rules (non-negotiable):
 - Zero invention: use only facts present in the provided evidence text or explicitly confirmed by the user. Do not invent metrics, tools, employers, or achievements.
+- Mirror the job description: when a jobDescription is provided, phrase the letter around how the description frames the role — its priorities, vocabulary, and expectations — while stating only the candidate facts from the evidence text. Rewording only: never add facts.
 - Write the whole letter in the requested output language, in the requested tone.
 - Preserve employer, institution, and certification names verbatim — never translate or adapt them.
 - Copy every number, date, duration, and metric exactly as it appears in the evidence text — never round, convert, or estimate.
@@ -76,6 +79,9 @@ export function ensureGenerateCoverLetterRegistered() {
         `JD digest: ${input.jdDigest.role ? `role: ${input.jdDigest.role}; ` : ""}${
           input.jdDigest.company ? `company: ${input.jdDigest.company}; ` : ""
         }requirements: ${input.jdDigest.topRequirements.join(", ") || "(none)"}`,
+        ...(input.jobDescription
+          ? ["", "Job description (phrase the letter around this — same facts, its framing):", input.jobDescription]
+          : []),
       ]
         .filter((line) => line !== null)
         .join("\n");

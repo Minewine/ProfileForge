@@ -5,16 +5,16 @@ profile and later generates ATS-optimized, fact-checked CVs and cover letters fr
 material claim is traceable to profile evidence — nothing is ever invented.
 
 **Status**: all eight planned feature slices are implemented and verified (2026-10-28: production
-build, lint, and the full test suites green — 420 Vitest tests, 45/46 Playwright e2e with one
+build, lint, and the full test suites green — 440 Vitest tests, 45/46 Playwright e2e with one
 key-gated skip): CV ingestion & structured
 profile ([001](specs/001-ats-cv-tailoring)), JD analysis & deterministic matching
-([002](specs/002-jd-matching)), evidence-aware CV + cover-letter generation with claim-level Fact
-Guard and verified PDF export ([003](specs/003-cv-generation)), profile-editor e2e suite
+([002](specs/002-jd-matching)), evidence-aware CV + cover-letter generation with prompt-driven JD
+tailoring and verified PDF export ([003](specs/003-cv-generation)), profile-editor e2e suite
 ([004](specs/004-profile-editing-e2e)), explicit selection & omissions
 ([005](specs/005-cv-selection-refinement)), polish & reliability ([006](specs/006-polish-reliability)),
-profile-editor CRUD fix ([007](specs/007-fix-profile-editor-crud)), and multi-user isolation
-([008](specs/008-multi-user-isolation)). Not started: the Evaluation benchmark module from the
-master specification. Full status report: [CONSOLIDATION.md](CONSOLIDATION.md).
+profile-editor CRUD fix ([007](specs/007-fix-profile-editor-crud)), multi-user isolation
+([008](specs/008-multi-user-isolation)), and the evaluation benchmark
+([009](specs/009-evaluation-benchmark)). Full status report: [CONSOLIDATION.md](CONSOLIDATION.md).
 
 ## What works today
 
@@ -28,7 +28,7 @@ master specification. Full status report: [CONSOLIDATION.md](CONSOLIDATION.md).
   Re-imports preserve your manually added entries.
 - **Edit** everything with autosave: all sections, bullet editor, provenance badges, review-flag
   confirmation, duplicate-skill merge-or-keep, version history with restore.
-- **Validate claims**: a report that flags dangling provenance and ungrounded content as blockers.
+- **Validate claims**: a report on the profile that flags dangling provenance and ungrounded content.
 - **Analyze job descriptions** (`/jobs`): paste an FR/EN JD, review extracted requirements, and run the
   deterministic match — exact (accent-insensitive, whole-phrase) → approved aliases (bilingual built-in
   list + your per-skill approvals) → LLM-proposed semantic matches that are **evidence-validated**
@@ -44,19 +44,18 @@ master specification. Full status report: [CONSOLIDATION.md](CONSOLIDATION.md).
   `selection` (distinct from `page_budget`) — the union of draft + omissions always covers the whole
   profile. The premium LLM only rewrites plan items **keyed by id** — bullets **and role titles** — so
   every material claim carries `sourceBulletIds`/evidence provenance resolved against the profile
-  snapshot pinned at job start (titles fall back verbatim, never title-less). The Professional Summary is
+  snapshot pinned at job start (titles fall back verbatim, never title-less). The draft prompt
+  receives the full job description (capped) and rewords the summary and bullets toward its
+  vocabulary, priorities, and framing — **rewording only**: facts are never added, merged, or
+  dropped. The Professional Summary is
   synthesized from the job's must-have requirements plus the strongest matching evidence, bounded by the
   user-facing summary-length setting (30–120 words). Page budget (1–3 pages) is enforced by a
-  measure-and-demote loop that records every dropped item as an inspectable, restorable omission. The
-  two-layer **Fact Guard** gates every download: deterministic checks (dangling provenance, numeric/date
-  identity, unverified skills, letter-verbatim reuse) plus an LLM meaning-preservation pass — blockers
-  must be edited, removed, or explicitly confirmed (confirmations carry across regenerations for
-  unchanged claims) before anything downloads, and a guard outage blocks download fail-closed
-  ([feature 006](specs/006-polish-reliability)): the blocked state explains itself — which gate is
-  closed (pending claims / validation incomplete / failed verification), every flag carries a
-  one-sentence plain-language explanation, AI-provider failures name their cause (rejected key,
-  exhausted credit, rate limit, unavailability) with a concrete next action, and generation shows a
-  persistent progress indicator. Two
+  measure-and-demote loop that records every dropped item as an inspectable, restorable omission.
+  Download gating is purely technical ([feature 006](specs/006-polish-reliability)): PDFs must pass the
+  two-level extraction gate, draft fallbacks (verbatim fallback, uncertain translation) render as a
+  passive "Draft notes" block with one-sentence plain-language explanations, AI-provider failures name
+  their cause (rejected key, exhausted credit, rate limit, unavailability) with a concrete next action,
+  and generation shows a persistent progress indicator. Two
   render templates are selectable for CVs: the default single-column **ATS** layout and a **designed
   two-column** template (shaded sidebar with contact/skills/languages, main column with
   summary/experience/education) that renders every list dynamically — both produce text-layer PDFs that
@@ -67,18 +66,18 @@ master specification. Full status report: [CONSOLIDATION.md](CONSOLIDATION.md).
 
 ### Download gate matrix
 
-| Format | Blocker gate (Fact Guard) | Extraction gate | Notes |
-|--------|---------------------------|-----------------|-------|
-| PDF (CV & letter) | required | required | the verified deliverable; failing renders are never stored |
-| DOCX (CV) | required | not applied | best-effort convenience output (decided parent exception) |
-| TXT (letter) | required | not applied | copyable plain text for application forms |
+| Format | Extraction gate | Notes |
+|--------|-----------------|-------|
+| PDF (CV & letter) | required | the verified deliverable; failing renders are never stored |
+| DOCX (CV) | not applied | best-effort convenience output (decided parent exception) |
+| TXT (letter) | not applied | copyable plain text for application forms |
 
 ### Generation API
 
 `POST /api/generations` (`{analysisId, kind: "cv" | "cover_letter", settings?}`) → 202; poll
 `GET /api/generations/[id]`; cancel/retry via `POST .../cancel` / `.../retry`; document +
-claim resolution via `GET/PATCH/DELETE .../document[/claims]`, `POST .../document/claims/[claimId]/confirm`,
-omission restore via `POST .../document/omissions/[omissionId]/restore`; gated downloads via
+provenance via `GET .../document`, omission restore via
+`POST .../document/omissions/[omissionId]/restore`; gated downloads via
 `GET /api/generations/[id]/download?format=pdf|docx|txt`. Full contract:
 [specs/003-cv-generation/contracts/api.md](specs/003-cv-generation/contracts/api.md).
 
@@ -126,7 +125,7 @@ until claimed — it is never exposed to other accounts.
 
 ```bash
 npm test        # vitest: unit (dates, language, containment, router, keystore, generation pipeline)
-                # + integration (routes w/ test DB, incl. the full generation/fact-guard/gate flows)
+                # + integration (routes w/ test DB, incl. the full generation/gate flows)
 npm run build   # production build
 
 npm run e2e:install   # one-time: Chromium for Playwright
@@ -139,12 +138,35 @@ physically isolated from your dev data, and the E2E harness aborts before mutati
 database URL targets `profileforge_e2e`. LLM calls are mocked in vitest; the E2E suite needs no API key
 (fixtures seed through the app's own routes), and its optional upload scenario self-skips without one.
 
+### CI (specs/010-github-actions-ci)
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the same checks on every push and pull request, in one
+job: lint → typecheck (`npx tsc --noEmit`) → build → Vitest → Playwright e2e — any failure fails the run.
+The Vitest suite runs against a Postgres 16 **service container** (same image/credentials as compose
+`db`; the harness auto-creates and migrates `profileforge_test` there), while e2e keeps using its own
+compose `e2e-db`. Dependencies and Playwright browsers are cached between runs, superseded runs on the
+same branch are cancelled, and a failed e2e run uploads its HTML report (7-day retention) for diagnosis.
+
+### Benchmark (specs/009-evaluation-benchmark)
+
+```bash
+npm run benchmark -- --keyless   # deterministic stages over the pinned fixture set (no AI key needed)
+npm run benchmark -- --record    # live run that also pins AI transcripts for --keyless
+npm run benchmark                # full live evaluation with baseline comparison
+```
+
+Measures generation quality (requirement coverage + six deterministic metrics) over the
+version-controlled fixture set in `benchmarks/fixtures/`, compares against the committed baseline, and exits `0` pass / `1` regressed /
+`2` incomplete / `3` config error — see [benchmarks/README.md](benchmarks/README.md) and
+[specs/009-evaluation-benchmark](specs/009-evaluation-benchmark). Live runs target their own
+`profileforge_benchmark` database and cost real money (default spend cap `$1.00`).
+
 ## Project layout
 
 - `src/app/` — App Router pages (`/profile`, `/upload`, `/jobs`, `/settings`, `/login`, `/register`)
   and all API routes under `src/app/api/`
 - `src/lib/` — domain logic: `parsing/` (PDF/DOCX + language detection), `matching/`,
-  `generation/` (pipeline, plan, draft, factguard, render), `llm/` (OpenRouter router + task
+  `generation/` (pipeline, plan, draft, fit, render, verify), `llm/` (OpenRouter router + task
   prompts), `settings/`, `validation/`, `auth/`, `profile/` & `jobs/` repositories
 - `src/components/` — UI: shadcn-style primitives (`ui/`), profile editor, generation views
 - `prisma/` — schema (19 models) and migrations; generated client lives in `src/generated/prisma/`

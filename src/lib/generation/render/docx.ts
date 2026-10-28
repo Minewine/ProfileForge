@@ -8,8 +8,7 @@ import { formatDate, formatDateRange, sectionHeading } from "@/lib/generation/re
 /**
  * Best-effort DOCX export (research R3): rendered from the same
  * `GeneratedCVContent` as the PDF (one source of truth), explicitly ungated
- * by the extraction check (parent decision) — download stays blocker-gated
- * like every artifact. Phase 8: `templateId: "designed"` renders the
+ * by the extraction check (parent decision). Phase 8: `templateId: "designed"` renders the
  * two-column layout (designed-docx.ts); the ATS single column stays default.
  */
 

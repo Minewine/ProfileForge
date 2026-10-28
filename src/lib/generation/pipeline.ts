@@ -2,7 +2,6 @@ import { db } from "@/lib/db";
 import { ApiError, redact } from "@/lib/api/errors";
 import {
   ensureDocument,
-  findConfirmedFingerprints,
   markCancelled,
   markFailed,
   markRunning,
@@ -32,7 +31,6 @@ import {
   type PinnedSnapshot,
 } from "@/lib/generation/plan";
 import { draftCV, draftLetter } from "@/lib/generation/draft";
-import { runFactGuard, runLetterFactGuard } from "@/lib/generation/factguard";
 import { fitCVToBudget, fitLetterToBudget } from "@/lib/generation/fit";
 import { renderCVForSettings } from "@/lib/generation/render/dispatch";
 import { letterPlainText, renderLetter } from "@/lib/generation/render/letter";
@@ -48,7 +46,7 @@ import { writeGenerationArtifacts } from "@/lib/generation/artifacts";
  * cancelled`, checking `cancelRequested` at every stage boundary.
  */
 
-export type StageName = "preconditions" | "plan" | "draft" | "factguard" | "render" | "gate" | "persist";
+export type StageName = "preconditions" | "plan" | "draft" | "render" | "gate" | "persist";
 
 export type StageContext = {
   jobId: string;
@@ -71,7 +69,7 @@ export type StageContext = {
   selection: SelectionRecord | null;
   content: GeneratedCVContent | CoverLetterContent | null; // [3+5] fitted after render — omissions final
   /** [2, letters only] current CV bullet/summary texts — the anti-repetition
-   *  input for the draft prompt and the LETTER_DUPLICATES_CV check (R11). */
+   *  input for the draft prompt (R11). */
   letterCvTexts: string[];
   warnings: ValidationFlag[]; // [3] draft warnings feeding the validation report
   validationReport: ValidationReport | null; // [4]
@@ -109,78 +107,51 @@ function describeStageError(stage: StageName | "pipeline", err: unknown): string
   }`;
 }
 
-/** Stages 1–7 per contracts/generation-pipeline.md: preconditions → plan →
- *  draft → factguard → render+fit → extraction gate → artifacts & persist. */
+/** Stages per contracts/generation-pipeline.md: preconditions → plan → draft →
+ *  render+fit → extraction gate → artifacts & persist. The Fact Guard stage was
+ *  removed — tailoring now happens entirely in the draft prompt, and the only
+ *  remaining checks are the deterministic fit loop and extraction gate. */
 export function buildStages(): Stage[] {
   return [
     // [1] pin snapshot, resolve MatchReport evidence refs (dangling → skip + notice)
     { name: "preconditions", run: runPreconditionsStage },
     // [2] deterministic ranking + skills list + must-include set
     { name: "plan", run: runPlanStage },
-    // [3] premium LLM keyed rephrase/translate + keyed merge (R7; letters: R11)
+    // [3] premium LLM keyed rephrase/translate + keyed merge (R7; letters: R11).
+    // Draft warnings (VERBATIM_FALLBACK / UNCERTAIN_TRANSLATION) become a
+    // warnings-only validation report — informational, never gating.
     {
       name: "draft",
       run: async (ctx: StageContext): Promise<void> => {
         if (!ctx.plan) throw new Error("Draft stage requires the plan stage output.");
         const plan = ctx.plan;
         const checkCancelled = () => assertNotCancelled(ctx.jobId); // before every LLM call
-        if (plan.kind === "letter") {
-          const { content, warnings } = await draftLetter({
-            userId: ctx.userId,
-            plan,
-            settings: ctx.settings,
-            cvTexts: ctx.letterCvTexts,
-            runId: ctx.runId,
-            checkCancelled,
-          });
-          ctx.content = content;
-          ctx.warnings = warnings;
-          return;
-        }
-        const { content, warnings } = await draftCV({
-          userId: ctx.userId,
-          plan,
-          settings: ctx.settings,
-          runId: ctx.runId,
-          checkCancelled,
-        });
+        const { content, warnings } =
+          plan.kind === "letter"
+            ? await draftLetter({
+                userId: ctx.userId,
+                plan,
+                settings: ctx.settings,
+                cvTexts: ctx.letterCvTexts,
+                runId: ctx.runId,
+                checkCancelled,
+              })
+            : await draftCV({
+                userId: ctx.userId,
+                plan,
+                settings: ctx.settings,
+                runId: ctx.runId,
+                checkCancelled,
+              });
         ctx.content = content;
         ctx.warnings = warnings;
-      },
-    },
-    // [4] Fact Guard: deterministic layer (always) + semantic economy layer.
-    // Semantic failure does NOT fail the job — the report comes back with
-    // layersRun.semantic = false so only the download gate closes
-    // (fail-closed, FR-010 / research R8). Letters add LETTER_DUPLICATES_CV.
-    {
-      name: "factguard",
-      run: async (ctx: StageContext): Promise<void> => {
-        if (!ctx.content || !ctx.pinnedSnapshot) {
-          throw new Error("Fact Guard stage requires the preconditions and draft outputs.");
-        }
-        // cross-version confirmations (R10): fingerprints confirmed on this
-        // document auto-resolve identical claims in the new version
-        const document = await db.generatedDocument.findUnique({
-          where: { analysisId_kind: { analysisId: ctx.analysisId, kind: ctx.kind } },
-        });
-        const confirmedFingerprints = document ? await findConfirmedFingerprints(document.id) : [];
-        const guardArgs = {
-          userId: ctx.userId,
-          content: ctx.content,
-          snapshot: ctx.pinnedSnapshot,
-          settings: ctx.settings,
-          runId: ctx.runId,
-          checkCancelled: () => assertNotCancelled(ctx.jobId), // before the LLM call
-          draftWarnings: ctx.warnings, // VERBATIM_FALLBACK / UNCERTAIN_TRANSLATION from stage 3
-          confirmedFingerprints,
+        ctx.validationReport = {
+          flags: warnings,
+          summary: { blockers: 0, warnings: warnings.length },
         };
-        ctx.validationReport =
-          !("paragraphs" in ctx.content)
-            ? await runFactGuard({ ...guardArgs, content: ctx.content, matchReport: ctx.matchReport! })
-            : await runLetterFactGuard({ ...guardArgs, content: ctx.content, cvTexts: ctx.letterCvTexts });
       },
     },
-    // [5] render & fit: measure-and-demote loop → omissions final on content
+    // [4] render & fit: measure-and-demote loop → omissions final on content
     {
       name: "render",
       run: async (ctx: StageContext): Promise<void> => {
@@ -209,7 +180,7 @@ export function buildStages(): Stage[] {
         ctx.pdfBytes = fitted.bytes;
       },
     },
-    // [6] extraction gate: two-level check on the rendered bytes with bounded
+    // [5] extraction gate: two-level check on the rendered bytes with bounded
     // re-render retries (deterministic renderer + ASCII-sanitization fallback
     // pass). Still failing ⇒ job fails EXPORT_GATE_FAILED and the full check
     // results are stored on a gate-failed version with NO artifacts (SC-003).
@@ -268,7 +239,7 @@ export function buildStages(): Stage[] {
         }
       },
     },
-    // [7] artifacts & persist: append the version first (its id drives the
+    // [6] artifacts & persist: append the version first (its id drives the
     // artifact path), then write pdf (gate passed) + docx (best-effort) and
     // store the metadata + check result onto that version.
     {

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   ArtifactMetaSchema,
-  ClaimFingerprintSchema,
   CoverLetterContentSchema,
   GeneratedCVContentSchema,
   GenerationSettingsInputSchema,
@@ -10,7 +9,6 @@ import {
   SelectionRecordSchema,
   ValidationReportSchema,
   certificationClaimId,
-  claimFingerprint,
   educationClaimId,
   experienceClaimId,
   letterClaimId,
@@ -178,31 +176,6 @@ describe("claim ids", () => {
   });
 });
 
-describe("claim fingerprint", () => {
-  it("is stable for identical text+evidence and order-insensitive over evidence", () => {
-    const a = claimFingerprint("Led a team of 5 engineers", ["b1", "b2"]);
-    const b = claimFingerprint("Led a team of 5 engineers", ["b2", "b1"]);
-    expect(a).toBe(b);
-    expect(a).toMatch(/^[0-9a-f]{64}$/); // sha256 hex
-  });
-
-  it("changes when the claim text changes (under normalization)", () => {
-    const a = claimFingerprint("Led a team of 5 engineers", ["b1"]);
-    const b = claimFingerprint("Led a team of 6 engineers", ["b1"]);
-    expect(a).not.toBe(b);
-  });
-
-  it("normalizes text before hashing (accents/case/punctuation-insensitive)", () => {
-    const a = claimFingerprint("Réduit les coûts de 30 %", ["b1"]);
-    const b = claimFingerprint("reduit les couts de 30%", ["b1"]);
-    expect(a).toBe(b);
-  });
-
-  it("changes when the evidence set changes", () => {
-    expect(claimFingerprint("text", ["b1"])).not.toBe(claimFingerprint("text", ["b1", "b2"]));
-  });
-});
-
 describe("stored content shapes", () => {
   it("roundtrips a full GeneratedCVContent", () => {
     const content = {
@@ -266,42 +239,34 @@ describe("stored content shapes", () => {
     expect(CoverLetterContentSchema.safeParse({ ...letter, claimIdVersion: 0 }).success).toBe(false);
   });
 
-  it("roundtrips a ValidationReport and enforces layers/summary shape", () => {
+  it("roundtrips a warnings-only ValidationReport and enforces shape", () => {
     const report = {
-      layersRun: { deterministic: true, semantic: true },
       flags: [
         {
-          code: "NUMERIC_MISMATCH",
+          code: "VERBATIM_FALLBACK",
           claim: "exp.e1.1",
-          severity: "blocker",
+          severity: "warning",
           affectedFieldIds: ["exp.e1.1"],
           sourceEvidence: [{ type: "bullet", id: "b1", snippet: "…" }],
           resolution: "pending",
         },
         {
-          code: "VERBATIM_FALLBACK",
+          code: "UNCERTAIN_TRANSLATION",
           claim: "summary",
           severity: "warning",
           resolution: "user_confirmed",
           confirmedAt: "2026-10-22T00:00:00.000Z",
         },
       ],
-      summary: { blockers: 1, warnings: 1 },
+      summary: { blockers: 0, warnings: 2 },
     };
     expect(ValidationReportSchema.safeParse(report).success).toBe(true);
-    // fail-closed core: deterministic layer is a literal true
-    expect(
-      ValidationReportSchema.safeParse({ ...report, layersRun: { deterministic: false, semantic: true } })
-        .success,
-    ).toBe(false);
-    expect(ValidationReportSchema.safeParse({ ...report, layersRun: undefined }).success).toBe(false);
-    expect(
-      ValidationReportSchema.safeParse({ ...report, flags: [{ ...report.flags[0], severity: "fatal" }] })
-        .success,
-    ).toBe(false);
+    expect(ValidationReportSchema.safeParse({ ...report, flags: [{ ...report.flags[0], severity: "fatal" }] }).success).toBe(
+      false,
+    );
   });
 
-  it("roundtrips ArtifactMeta and ClaimFingerprint", () => {
+  it("roundtrips ArtifactMeta", () => {
     expect(
       ArtifactMetaSchema.safeParse({
         format: "pdf",
@@ -315,10 +280,6 @@ describe("stored content shapes", () => {
       ArtifactMetaSchema.safeParse({ format: "html", storagePath: "x", sha256: "y", bytes: 1, gate: "none" })
         .success,
     ).toBe(false);
-    expect(
-      ClaimFingerprintSchema.safeParse({ fingerprint: claimFingerprint("t", ["a"]), confirmedAt: "2026-10-22T00:00:00.000Z" })
-        .success,
-    ).toBe(true);
   });
 });
 

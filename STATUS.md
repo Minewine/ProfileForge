@@ -41,10 +41,14 @@ Testing ProfileForge at http://localhost:3000 via in-app browser, using
    dropped (never fatal to a parse/save); applied to `BasicsSchema.links` (dropping), the project
    input/patch schemas (strict 400), and `prepareDraft`'s import payloads. Regression tests:
    `tests/unit/link-validation.test.ts`.
-3. **P1 — `LLM_UNAVAILABLE` banner masks the real error.** Server log showed the
+3. **P1 — FIXED 2026-10-28: `LLM_UNAVAILABLE` banner masks the real error.** Server log showed the
    configured economy model `minimax/minimax-m3.1-flash:free` was retired
    (OpenRouter HTTP 404, free period ended 2026-10-22), but the UI said only
-   "AI provider is temporarily unavailable".
+   "AI provider is temporarily unavailable". Fix: `mapOpenRouterStatus` now takes the provider's
+   response body — 404 gets a dedicated "model was not found on OpenRouter … pick another model in
+   Settings" message, other unmapped statuses carry the HTTP status, and a truncated, secret-redacted
+   provider detail reaches the user-facing message (server log unchanged). Tests:
+   `tests/unit/llm-errors.test.ts`.
 4. **P1 — OpenRouter account has zero credits** (HTTP 402 "never purchased
    credits"). Any paid model (incl. configured premium `anthropic/claude-sonnet-4.5`)
    fails with `LLM_QUOTA`. Generation (T6) will likely hit this unless it uses a

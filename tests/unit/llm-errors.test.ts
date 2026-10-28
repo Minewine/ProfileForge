@@ -32,13 +32,34 @@ describe("mapOpenRouterStatus messages (actionable per contract)", () => {
     expect(err.message).toMatch(/retry/i);
   });
 
-  it("unmapped statuses → LLM_UNAVAILABLE with retry + work-preservation note", () => {
-    for (const status of [404, 500, 503]) {
+  it("404 → LLM_UNAVAILABLE naming the model-not-found cause and the Settings remedy", () => {
+    const err = mapOpenRouterStatus(404, '{"error":{"message":"No endpoints found for minimax/minimax-m3.1-flash:free"}}');
+    expect(err.code).toBe("LLM_UNAVAILABLE");
+    expect(err.message).toMatch(/not found on OpenRouter/i);
+    expect(err.message).toMatch(/Settings/i);
+    // the P1 fix: the provider's own detail reaches the user message (redacted)
+    expect(err.message).toContain("No endpoints found for minimax/minimax-m3.1-flash:free");
+  });
+
+  it("other unmapped statuses carry the HTTP status, retry, and work-preservation note", () => {
+    for (const status of [500, 502, 503]) {
       const err = mapOpenRouterStatus(status);
       expect(err.code).toBe("LLM_UNAVAILABLE");
+      expect(err.message).toContain(`HTTP ${status}`);
       expect(err.message).toMatch(/retry/i);
       expect(err.message).toMatch(/preserved/i);
     }
+  });
+
+  it("provider detail is truncated and secret-redacted before it reaches the message", () => {
+    const err = mapOpenRouterStatus(503, "boom sk-or-v1-abcdefghijklmnopqrst redacted-tail ".repeat(10));
+    expect(err.message).not.toMatch(/sk-or-v1-/);
+    expect(err.message.length).toBeLessThan(400);
+  });
+
+  it("works without provider detail (no 'Provider said' suffix)", () => {
+    const err = mapOpenRouterStatus(503);
+    expect(err.message).not.toMatch(/Provider said/);
   });
 });
 

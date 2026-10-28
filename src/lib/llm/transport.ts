@@ -176,19 +176,20 @@ async function postWithRetry(
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (!res.ok) {
-        const err = mapOpenRouterStatus(res.status);
         if ((res.status === 429 || res.status >= 500) && i === 0) {
           await sleep(2000);
           continue;
         }
         // FR-002 (feature 006): retain the provider's failure detail server-side
         // for diagnosis — status + a short body snippet, secrets redacted, never
-        // the key/prompt/full response. The user-facing message stays generic.
+        // the key/prompt/full response. The user-facing message now carries the
+        // status and a redacted detail snippet too (a generic "temporarily
+        // unavailable" once masked a retired model's 404 for days).
         // Read after the retry decision: the body is consumed exactly once, on
         // the attempt that actually throws.
         const detail = await res.text().catch(() => "");
         console.warn(redact(`openrouter ${body.model} call failed: HTTP ${res.status} ${detail.slice(0, 200)}`));
-        throw err;
+        throw mapOpenRouterStatus(res.status, detail);
       }
       const response = (await res.json()) as OpenRouterResponse;
       const rawContent = response.choices?.[0]?.message?.content ?? null;

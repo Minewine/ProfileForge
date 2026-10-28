@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: profileforge-db
+    environment:
+      POSTGRES_USER: profileforge
+      POSTGRES_PASSWORD: profileforge
+      POSTGRES_DB: profileforge
+    ports:
+      # host 5433 to avoid clashing with a locally installed PostgreSQL on 5432
+      - "5433:5432"
+    volumes:
+      - profileforge_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U profileforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Dedicated E2E database (spec 004): physical isolation from `db` — port 5434,
+  # database profileforge_e2e, own volume. reset-db.mjs refuses any DATABASE_URL
+  # that does not target this database.
+  e2e-db:
+    image: postgres:16-alpine
+    container_name: profileforge-e2e-db
+    environment:
+      POSTGRES_USER: profileforge
+      POSTGRES_PASSWORD: profileforge
+      POSTGRES_DB: profileforge_e2e
+    ports:
+      # host 5434: above `db` (5433) and local PostgreSQL (5432)
+      - "5434:5432"
+    volumes:
+      - profileforge_e2e_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U profileforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  profileforge_pgdata:
+  profileforge_e2e_pgdata:

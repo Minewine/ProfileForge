@@ -39,3 +39,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ProfileForge
+uploads/
+.appsecret
+*.tsbuildinfo
+next-env.d.ts
+src/generated/
+uploads-test/
+
+# E2E suite (spec 004)
+uploads-e2e/
+test-results/
+playwright-report/
+tests/e2e/.seed-state.json
+
+# E2E auth state (specs/008)
+tests/e2e/.auth-state.json
+gui-test-screenshots/
+uploads-e2e/

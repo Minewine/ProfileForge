@@ -1,0 +1,412 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // connection URL lives in prisma.config.ts (Prisma 7)
+}
+
+// --- Auth (specs/008-multi-user-isolation) ---
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique // stored normalized: trim + lowercase
+  passwordHash String // Argon2id — never returned by any API, never logged
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions        Session[]
+  profiles        Profile[]
+  sourceDocuments SourceDocument[]
+  jobAnalyses     JobAnalysis[]
+  llmUsageLogs    LlmUsageLog[]
+  settings        AppSettings?
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique // SHA-256 hex of the cookie token — raw token never stored
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// --- Ingestion ---
+
+model SourceDocument {
+  id                               String    @id @default(cuid())
+  userId                           String? // null = quarantined legacy row (pre-multi-user); claimed by scripts/assign-owner.ts
+  originalFilename                 String
+  storagePath                      String
+  sha256                           String
+  mimeType                         String
+  sizeBytes                        Int
+  detectedLanguage                 String // "fr" | "en"
+  languageManuallyCorrected        Boolean   @default(false)
+  pageCount                        Int?
+  paragraphCount                   Int?
+  extractedPages                   Json // [{ page | paragraphIndex, text }]
+  charCount                        Int       @default(0)
+  requiresPartialParseConfirmation Boolean   @default(false)
+  parseStatus                      String    @default("unparsed") // unparsed | parsing | parsed | failed
+  parseError                       String?
+  parseResult                      Json? // validated ProfileDraft
+  importedAt                       DateTime?
+  createdAt                        DateTime  @default(now())
+  updatedAt                        DateTime  @updatedAt
+
+  experiences    Experience[]
+  educations     Education[]
+  skills         Skill[]
+  languageSkills LanguageSkill[]
+  projects       Project[]
+  certifications Certification[]
+  bullets        Bullet[]
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// --- Profile ---
+
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String? // null = quarantined legacy row (pre-multi-user); claimed by scripts/assign-owner.ts
+  version   Int      @default(1)
+  language  String // "fr" | "en"
+  basics    Json? // { name, headline?, summary?, location?, email?, phone?, links? }
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  experiences    Experience[]
+  educations     Education[]
+  skills         Skill[]
+  languages      LanguageSkill[]
+  projects       Project[]
+  certifications Certification[]
+  snapshots      ProfileSnapshot[]
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Experience {
+  id               String   @id @default(cuid())
+  profileId        String
+  company          String
+  title            String
+  location         String?
+  startDate        String? // ^\d{4}-(0[1-9]|1[0-2])$ — null only while flagged
+  endDate          String? // YYYY-MM | "present" | null
+  skillsUsed       String[] @default([])
+  order            Int      @default(0)
+  provenance       String   @default("user_entered") // imported | user_entered | user_confirmed
+  sourceDocumentId String?
+  sourceLocator    Json? // { page?, paragraphIndex?, section? } — required iff imported
+  language         String? // "fr" | "en" — set from SourceDocument at import
+  confidence       Float?
+  reviewFlag       String? // low_confidence | containment_failed | ambiguous_date | missing_dates — cleared on user_confirmed
+
+  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+
+  bullets Bullet[]
+
+  @@index([profileId])
+}
+
+model Bullet {
+  id               String   @id @default(cuid())
+  experienceId     String?
+  projectId        String?
+  educationId      String?
+  text             String
+  order            Int      @default(0)
+  provenance       String   @default("user_entered")
+  sourceDocumentId String?
+  sourceLocator    Json?
+  language         String?
+  confidence       Float?
+  containmentOk    Boolean?
+  reviewFlag       String?
+
+  experience     Experience?     @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  education      Education?      @relation(fields: [educationId], references: [id], onDelete: Cascade)
+  sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+
+  @@index([experienceId])
+  @@index([projectId])
+  @@index([educationId])
+}
+
+model Education {
+  id               String  @id @default(cuid())
+  profileId        String
+  institution      String
+  degree           String?
+  field            String?
+  startDate        String?
+  endDate          String?
+  grade            String?
+  order            Int     @default(0)
+  provenance       String  @default("user_entered")
+  sourceDocumentId String?
+  sourceLocator    Json?
+  language         String?
+  confidence       Float?
+  reviewFlag       String?
+
+  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+
+  bullets Bullet[]
+
+  @@index([profileId])
+}
+
+model Skill {
+  id               String   @id @default(cuid())
+  profileId        String
+  name             String
+  category         String?
+  aliases          String[] @default([])
+  level            String? // user-stated only — never inferred
+  order            Int      @default(0)
+  provenance       String   @default("user_entered")
+  sourceDocumentId String?
+  sourceLocator    Json?
+  language         String?
+  confidence       Float?
+  reviewFlag       String?
+
+  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+
+  @@index([profileId, name])
+}
+
+model LanguageSkill {
+  id               String  @id @default(cuid())
+  profileId        String
+  name             String
+  proficiency      String?
+  order            Int     @default(0)
+  provenance       String  @default("user_entered")
+  sourceDocumentId String?
+  sourceLocator    Json?
+  language         String?
+  confidence       Float?
+  reviewFlag       String?
+
+  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+
+  @@index([profileId])
+}
+
+model Project {
+  id               String  @id @default(cuid())
+  profileId        String
+  name             String
+  description      String?
+  link             String?
+  startDate        String?
+  endDate          String?
+  order            Int     @default(0)
+  provenance       String  @default("user_entered")
+  sourceDocumentId String?
+  sourceLocator    Json?
+  language         String?
+  confidence       Float?
+  reviewFlag       String?
+
+  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+
+  bullets Bullet[]
+
+  @@index([profileId])
+}
+
+model Certification {
+  id               String  @id @default(cuid())
+  profileId        String
+  title            String
+  issuer           String?
+  issueDate        String? // YYYY-MM
+  order            Int     @default(0)
+  provenance       String  @default("user_entered")
+  sourceDocumentId String?
+  sourceLocator    Json?
+  language         String?
+  confidence       Float?
+  reviewFlag       String?
+
+  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sourceDocument SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+
+  @@index([profileId])
+}
+
+model ProfileSnapshot {
+  id        String   @id @default(cuid())
+  profileId String
+  version   Int
+  cause     String // import | edit | restore
+  data      Json
+  createdAt DateTime @default(now())
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, version])
+}
+
+// --- Settings & usage ---
+
+model AppSettings {
+  id                     String   @id @default(cuid())
+  // Per-user settings row (specs/008). Nullable during migration: the legacy
+  // singleton row keeps NULL (quarantined) until scripts/assign-owner.ts claims it.
+  userId                 String?  @unique
+  openRouterKeyEncrypted String?
+  keyHint                String?
+  modelEconomy           String   @default("minimax/minimax-m3.1-flash:free")
+  modelPremium           String   @default("anthropic/claude-sonnet-4.5")
+  costCapUsd             Float    @default(0.5)
+  updatedAt              DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LlmUsageLog {
+  id               String   @id @default(cuid())
+  userId           String? // owner attribution for per-user cost caps (specs/008 FR-008); null = legacy
+  task             String
+  model            String
+  runId            String
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  costUsd          Float    @default(0)
+  durationMs       Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([userId])
+}
+
+// --- Slice 2: Job analysis & matching ---
+
+model JobAnalysis {
+  id                        String   @id @default(cuid())
+  userId                    String? // null = quarantined legacy row (pre-multi-user); claimed by scripts/assign-owner.ts
+  jdText                    String
+  language                  String // "fr" | "en"
+  languageManuallyCorrected Boolean  @default(false)
+  status                    String   @default("created") // created | extracted | finalized | matched | failed
+  statusError               String?
+  profileVersion            Int? // pinned at match time (parent FR-027)
+  matchReport               Json? // immutable once written (canonical §4 shape + extensions)
+  semanticDropped           Int      @default(0)
+  notice                    String?
+  rerunOfId                 String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  rerunOf            JobAnalysis?        @relation("RerunChain", fields: [rerunOfId], references: [id])
+  reruns             JobAnalysis[]       @relation("RerunChain")
+  requirements       JobRequirement[]
+  generations        GenerationJob[]
+  generatedDocuments GeneratedDocument[]
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([rerunOfId])
+  @@index([userId])
+}
+
+model JobRequirement {
+  id               String  @id @default(cuid())
+  analysisId       String
+  text             String
+  category         String // skill | tool | years_experience | education | domain | language | other
+  importance       String // must | nice
+  isHardConstraint Boolean @default(false)
+  order            Int     @default(0)
+  source           String  @default("extracted") // extracted | user
+  userConfirmed    Boolean @default(false)
+
+  analysis JobAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId])
+}
+
+// --- Slice 3: Evidence-aware CV & cover letter generation ---
+
+model GenerationJob {
+  id              String    @id @default(cuid())
+  analysisId      String
+  kind            String // "cv" | "cover_letter"
+  settings        Json // GenerationSettings — frozen at creation
+  status          String    @default("queued") // queued | running | succeeded | failed | cancelled
+  statusError     String? // machine code + human message on failure
+  cancelRequested Boolean   @default(false)
+  attempt         Int       @default(1)
+  runId           String? // cost-cap grouping per attempt (fresh on retry)
+  profileVersion  Int // pinned at creation = profile.version (research R5)
+  notice          String? // e.g. "stale-analysis" when MatchReport evidence refs dangled
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  analysis JobAnalysis                @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  versions GeneratedDocumentVersion[]
+
+  @@index([analysisId])
+  @@index([status])
+}
+
+model GeneratedDocument {
+  id            String   @id @default(cuid())
+  analysisId    String
+  kind          String // "cv" | "cover_letter"
+  confirmations Json     @default("[]") // ClaimFingerprint[] — grows as users confirm; pruned never
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  analysis JobAnalysis                @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  versions GeneratedDocumentVersion[]
+
+  @@unique([analysisId, kind])
+}
+
+model GeneratedDocumentVersion {
+  id               String   @id @default(cuid())
+  documentId       String
+  version          Int // 1-based per document
+  producingJobId   String   @unique // one version per successful job
+  content          Json // GeneratedCVContent | CoverLetterContent (incl. omissions + provenance)
+  selection        Json? // SelectionRecord — which entries were selected and why (feature 005; null for pre-feature versions)
+  validationReport Json // ValidationReport — rewritten on claim edits
+  revision         Int      @default(0) // bumped on each claim edit/remove (confirm does not bump)
+  artifacts        Json     @default("[]") // ArtifactMeta[]
+  extractionCheck  Json? // full two-level gate result for the PDF
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  document     GeneratedDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  producingJob GenerationJob     @relation(fields: [producingJobId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, version])
+}

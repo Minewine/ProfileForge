@@ -1,0 +1,216 @@
+{
+  "email": "demo.fr@profileforge.local",
+  "password": "DemoFr2026!",
+  "profile": {
+    "language": "fr",
+    "basics": {
+      "name": "Camille Laurent",
+      "headline": "Ingénieure logicielle senior — Plateformes cloud & systèmes distribués",
+      "summary": "Ingénieure logicielle avec plus de dix ans d'expérience sur des plateformes SaaS B2B : architectures distribuées, migration du monolithe vers des services, fiabilité en production et observabilité. J'encadre aujourd'hui une équipe de sept ingénieurs chez Nexvia et j'aime faire grandir des équipes capables de livrer vite sans sacrifier la qualité. Certifiée AWS et Kubernetes, je travaille en français et en anglais au quotidien.",
+      "location": "Paris, France",
+      "email": "demo.fr@profileforge.local",
+      "phone": "+33 6 12 34 56 78",
+      "links": [
+        "https://www.linkedin.com/in/camille-laurent",
+        "https://github.com/camille-laurent",
+        "https://camillelaurent.dev"
+      ]
+    },
+    "experiences": [
+      {
+        "company": "Nexvia",
+        "title": "Ingénieure logicielle senior · Lead technique",
+        "location": "Paris, France",
+        "startDate": "2022-03",
+        "endDate": "present",
+        "skillsUsed": ["TypeScript", "Node.js", "Kubernetes", "GraphQL", "PostgreSQL", "OpenTelemetry", "CI/CD"],
+        "bullets": [
+          "Pilotage de la migration du monolithe Java vers des services TypeScript sur Kubernetes : latence p95 ramenée de 380 ms à 140 ms et zéro interruption de déploiement depuis 14 mois.",
+          "Encadrement technique d'une équipe de sept ingénieurs : revues de code, mentorat, recrutement (12 entretiens techniques en 2025) et arbitrages d'architecture.",
+          "Conception d'une API GraphQL publique adoptée par plus de 40 clients B2B en douze mois, avec versionnement des schémas et documentation générée.",
+          "Mise en place d'une plateforme d'observabilité (OpenTelemetry, Grafana) : temps moyen de diagnostic des incidents réduit de 4 h à 45 min.",
+          "Fiabilisation du pipeline CI/CD (GitHub Actions, déploiements bleu-vert) : taux d'échec des déploiements ramené de 8 % à 1,5 %.",
+          "Référente technique du chantier RGPD : cartographie des données personnelles et chiffrement au repos sur PostgreSQL."
+        ]
+      },
+      {
+        "company": "SoFlow",
+        "title": "Ingénieure logicielle",
+        "location": "Nantes, France",
+        "startDate": "2019-01",
+        "endDate": "2022-02",
+        "skillsUsed": ["TypeScript", "Node.js", "PostgreSQL", "Redis", "AWS"],
+        "bullets": [
+          "Développement du moteur de facturation à la consommation d'un réseau de 12 000 bornes de recharge : 300 000 sessions par mois, zéro écart de rapprochement sur 24 mois.",
+          "Intégration du protocole OCPI 2.1.1 avec quinze opérateurs de mobilité pour l'itinérance de recharge.",
+          "Réduction des coûts AWS de 28 % : dimensionnement des instances, mise en cache Redis des tarifs et suppression des appels redondants.",
+          "Refonte du schéma PostgreSQL avec partitionnement mensuel : requêtes de reporting 6 fois plus rapides.",
+          "Astreinte technique en rotation et fiabilisation de la facturation : taux d'erreurs ramené de 2,1 % à 0,3 %."
+        ]
+      },
+      {
+        "company": "MedaCore",
+        "title": "Ingénieure backend",
+        "location": "Lyon, France",
+        "startDate": "2016-09",
+        "endDate": "2018-12",
+        "skillsUsed": ["Java", "Spring Boot", "PostgreSQL", "Docker"],
+        "bullets": [
+          "Conception d'API REST HL7/FHIR pour l'interopérabilité des dossiers patients avec quatre hôpitaux partenaires.",
+          "Implémentation du chiffrement de bout en bout et des pistes d'audit dans le cadre de la certification HDS et du RGPD.",
+          "Tests de charge (JMeter) et montée en charge du service d'ordonnancement : 1 500 requêtes par minute soutenues en pic.",
+          "Introduction de Docker dans l'équipe : environnement de développement reproductible adopté par les 14 développeurs."
+        ]
+      },
+      {
+        "company": "Atelier Numérique",
+        "title": "Développeuse full-stack",
+        "location": "Lyon, France",
+        "startDate": "2014-04",
+        "endDate": "2016-08",
+        "skillsUsed": ["JavaScript", "React", "Node.js", "MongoDB"],
+        "bullets": [
+          "Développement de huit sites e-commerce et applications métier pour des clients des secteurs du commerce, de la culture et de l'industrie.",
+          "Refonte front-end d'un portail culturel sous React : score Lighthouse d'accessibilité porté de 62 à 94, conformité RGAA.",
+          "Mise en place d'une bibliothèque de composants réutilisables : 30 % de temps de développement en moins sur les nouveaux projets.",
+          "Intégrations de paiement (Stripe, PayZen) et back-offices d'administration sous Node.js."
+        ]
+      },
+      {
+        "company": "LocaBreizh",
+        "title": "Développeuse junior",
+        "location": "Rennes, France",
+        "startDate": "2012-10",
+        "endDate": "2014-03",
+        "skillsUsed": ["PHP", "MySQL", "jQuery"],
+        "bullets": [
+          "Développement de la plateforme de location saisonnière (PHP/MySQL) : 20 000 annonces publiées la première année.",
+          "Migration progressive de jQuery vers une architecture JavaScript modularisée : temps de chargement réduits de 40 %.",
+          "Automatisation des sauvegardes et des déploiements (cron, rsync), mettant fin à deux incidents majeurs par an.",
+          "Support client de niveau 2 et correctifs en production pendant les pics saisonniers."
+        ]
+      }
+    ],
+    "educations": [
+      {
+        "institution": "INSA Lyon",
+        "degree": "Diplôme d'ingénieure",
+        "field": "Génie informatique",
+        "startDate": "2007-09",
+        "endDate": "2012-06",
+        "grade": "Mention Bien"
+      },
+      {
+        "institution": "TU Delft",
+        "degree": "Semestre d'échange (Erasmus)",
+        "field": "Systèmes distribués",
+        "startDate": "2010-02",
+        "endDate": "2010-06"
+      },
+      {
+        "institution": "Télécom Paris",
+        "degree": "Formation continue",
+        "field": "Architecture cloud et fiabilité (SRE)",
+        "startDate": "2023-01",
+        "endDate": "2023-03"
+      },
+      {
+        "institution": "Lycée Émile Zola, Rennes",
+        "degree": "Baccalauréat scientifique",
+        "field": "Sciences de l'ingénieur",
+        "startDate": "2006-09",
+        "endDate": "2007-06",
+        "grade": "Mention Très Bien"
+      }
+    ],
+    "skills": [
+      { "name": "TypeScript", "category": "Langages" },
+      { "name": "JavaScript", "category": "Langages" },
+      { "name": "Java", "category": "Langages" },
+      { "name": "Node.js", "category": "Backend", "aliases": ["Node", "NodeJS"] },
+      { "name": "React", "category": "Frontend", "aliases": ["ReactJS"] },
+      { "name": "PostgreSQL", "category": "Bases de données", "aliases": ["Postgres"] },
+      { "name": "Redis", "category": "Bases de données" },
+      { "name": "MongoDB", "category": "Bases de données" },
+      { "name": "GraphQL", "category": "APIs" },
+      { "name": "Kafka", "category": "Messagerie événementielle", "aliases": ["Apache Kafka"] },
+      { "name": "Kubernetes", "category": "Cloud et infrastructure", "aliases": ["k8s"] },
+      { "name": "Docker", "category": "Cloud et infrastructure" },
+      { "name": "AWS", "category": "Cloud et infrastructure", "aliases": ["Amazon Web Services"] },
+      { "name": "Terraform", "category": "Cloud et infrastructure" },
+      { "name": "CI/CD", "category": "Pratiques d'ingénierie", "aliases": ["Intégration continue", "GitHub Actions"] },
+      { "name": "OpenTelemetry", "category": "Observabilité" }
+    ],
+    "languages": [
+      { "name": "Français", "proficiency": "Natif" },
+      { "name": "Anglais", "proficiency": "Courant (C1)" },
+      { "name": "Espagnol", "proficiency": "Intermédiaire (B1)" }
+    ],
+    "projects": [
+      {
+        "name": "Mélusine",
+        "description": "Bibliothèque TypeScript open source de validation de schémas GraphQL, orientée erreurs explicites et expérience développeur.",
+        "link": "https://github.com/camille-laurent/melusine",
+        "startDate": "2023-04",
+        "endDate": "present",
+        "bullets": [
+          "1 200 étoiles GitHub et 34 contributeurs ; adoptée par trois éditeurs pour leurs API publiques.",
+          "Publication d'une version majeure par an depuis 2023 ; temps de compilation réduit de 40 % entre les versions 1 et 2."
+        ]
+      },
+      {
+        "name": "Trajectoire",
+        "description": "Simulateur d'itinéraires bas carbone comparant train, voiture et avion sur les trajets domestiques français (projet personnel).",
+        "link": "https://trajectoire.camillelaurent.dev",
+        "startDate": "2021-09",
+        "endDate": "2022-05",
+        "bullets": [
+          "5 000 utilisateurs mensuels à la fin de la première année ; facteurs d'émission issus de la base ADEME.",
+          "Front React et API Node.js serverless ; hébergement sous 10 € par mois."
+        ]
+      },
+      {
+        "name": "Cartographie des flux Nexvia",
+        "description": "Cartographie temps réel des échanges entre services pour l'ensemble de la plateforme Nexvia (projet interne).",
+        "startDate": "2024-02",
+        "endDate": "2024-11",
+        "bullets": [
+          "Détection automatique des dépendances critiques à partir des traces OpenTelemetry.",
+          "30 % d'incidents régressifs en moins la première année grâce au suivi des couplages entre équipes."
+        ]
+      },
+      {
+        "name": "Contributions open source",
+        "description": "Contributions régulières à l'écosystème Node.js : Fastify, undici, zod.",
+        "link": "https://github.com/camille-laurent",
+        "startDate": "2022-01",
+        "endDate": "present",
+        "bullets": [
+          "24 pull requests fusionnées depuis 2022, dont deux correctifs de performance acceptés en amont.",
+          "Co-organisation du meetup Node.js Paris (200 participants par édition)."
+        ]
+      }
+    ],
+    "certifications": [
+      { "title": "AWS Certified Solutions Architect – Associate", "issuer": "Amazon Web Services", "issueDate": "2022-05" },
+      { "title": "Certified Kubernetes Administrator (CKA)", "issuer": "The Linux Foundation", "issueDate": "2023-11" },
+      { "title": "HashiCorp Certified: Terraform Associate (003)", "issuer": "HashiCorp", "issueDate": "2024-06" }
+    ]
+  },
+  "analysis": {
+    "jdFile": "fixtures/demo-jd-fr.txt",
+    "jdRole": "Ingénieur·e logiciel senior — Plateformes",
+    "jdCompany": "Solant",
+    "requirements": [
+      { "text": "Expérience confirmée en TypeScript et Node.js en production", "category": "skill", "importance": "must", "isHardConstraint": true },
+      { "text": "Expérience des plateformes conteneurisées (Kubernetes) en production", "category": "tool", "importance": "must", "isHardConstraint": true },
+      { "text": "Maîtrise de PostgreSQL en production", "category": "tool", "importance": "must", "isHardConstraint": true },
+      { "text": "Pratiques CI/CD éprouvées (pipelines, déploiements automatisés)", "category": "skill", "importance": "must", "isHardConstraint": true },
+      { "text": "Français courant, anglais technique lu et écrit", "category": "language", "importance": "must", "isHardConstraint": true },
+      { "text": "Expérience du secteur de l'énergie ou de l'immobilier", "category": "domain", "importance": "must", "isHardConstraint": true },
+      { "text": "Expérience avec Terraform ou Infrastructure as Code", "category": "tool", "importance": "nice", "isHardConstraint": false },
+      { "text": "Sensibilité à l'observabilité (OpenTelemetry, Grafana)", "category": "tool", "importance": "nice", "isHardConstraint": false },
+      { "text": "Conception d'API GraphQL pour des clients B2B", "category": "skill", "importance": "nice", "isHardConstraint": false }
+    ]
+  }
+}

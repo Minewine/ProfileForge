@@ -1,0 +1,43 @@
+Solant — Ingénieur·e logiciel senior, Plateformes (H/F)
+CDI · Paris 9e · hybride (2 jours sur site par semaine)
+
+À propos de Solant
+
+Solant édite une plateforme SaaS de pilotage énergétique pour l'immobilier tertiaire, utilisée
+par plus de 600 gestionnaires en France et en Belgique. Nos équipes construisent les outils qui
+aident nos clients à mesurer, comprendre et réduire la consommation de leurs parcs de bâtiments.
+
+Ce que vous ferez
+
+- Faire évoluer nos services métier écrits en TypeScript (Node.js), du schéma de données à l'API.
+- Concevoir, déployer et exploiter nos plateformes conteneurisées (Kubernetes) en production.
+- Améliorer en continu nos pipelines CI/CD et nos pratiques de déploiement automatisé.
+- Travailler la performance de PostgreSQL (requêtes, index, partitionnement) avec l'équipe data.
+- Concevoir des API robustes, documentées et versionnées pour nos partenaires intégrateurs.
+- Participer aux astreintes techniques (rotation d'une semaine par mois) et aux post-mortems.
+
+Ce que nous recherchons
+
+- Expérience confirmée en TypeScript et Node.js en production.
+- Expérience des plateformes conteneurisées (Kubernetes) en production.
+- Maîtrise de PostgreSQL en production.
+- Pratiques CI/CD éprouvées (pipelines, déploiements automatisés).
+- Français courant, anglais technique lu et écrit.
+- Expérience du secteur de l'énergie ou de l'immobilier.
+
+Ce qui serait un plus
+
+- Expérience avec Terraform ou Infrastructure as Code.
+- Sensibilité à l'observabilité (OpenTelemetry, Grafana).
+- Conception d'API GraphQL pour des clients B2B.
+- Diplôme d'ingénieur ou master en informatique (Bac+5), ou parcours équivalent.
+
+Notre process de recrutement
+
+Échange avec l'équipe recrutement (30 min), entretien technique (1 h, code + architecture),
+rencontre avec l'équipe et le manager, puis proposition. Comptez deux à trois semaines au total.
+
+Rémunération et avantages
+
+Fourchette : 65 000 € – 80 000 € brut annuel selon expérience. Titres-restaurant, mutuelle,
+télétravail flexible, matériel au choix, budget conférences annuel.

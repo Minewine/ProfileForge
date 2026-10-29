@@ -1,0 +1,40 @@
+Harborline — Senior Backend Engineer
+Permanent · London (hybrid, 2 days on-site) · Fintech analytics
+
+About Harborline
+
+Harborline builds the analytics platform that 400+ institutional treasury teams use to track
+cash positions, FX exposure, and counterparty risk in real time. The backend engineering group
+(18 people) owns the query layer, ingestion pipelines, and billing infrastructure.
+
+What you will do
+
+- Design and operate high-throughput backend services in TypeScript (Node.js) on AWS.
+- Own PostgreSQL data modelling, query performance, and schema migrations.
+- Evolve the GraphQL API surface together with the front-end team.
+- Grow the platform: codify infrastructure with Terraform and tighten CI/CD.
+- Review code, mentor engineers, and raise the bar on testing and observability.
+
+What we are looking for
+
+- 5+ years of professional experience building backend services with TypeScript.
+- Production experience with PostgreSQL.
+- Experience building and operating services on AWS.
+- Fluent English, written and spoken.
+- Experience with PCI DSS or financial compliance.
+
+Nice to have
+
+- Experience with GraphQL APIs at scale.
+- Familiarity with Terraform or other infrastructure-as-code tools.
+- Solid testing culture (Jest, contract tests).
+
+Hiring process
+
+Intro call (30 min), then a technical interview (60 min, systems + code), then a team
+conversation and offer. We aim to complete the process within three weeks.
+
+Compensation & benefits
+
+£85,000 – £110,000 depending on experience, plus equity. Private healthcare, pension,
+flexible hybrid working, and an annual learning budget.

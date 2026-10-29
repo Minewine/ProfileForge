@@ -121,6 +121,30 @@ npm run db:assign-owner -- --email you@example.com   # creates the account if ab
 The script is idempotent; re-running claims nothing new. Unclaimed data stays invisible to everyone
 until claimed — it is never exposed to other accounts.
 
+### Demo accounts
+
+Two disposable accounts with rich, fully populated profiles ship with the repo for demos and manual
+testing. **Local/demo use only — never reuse these credentials anywhere real.**
+
+| Account | Email | Password | Profile |
+|---------|-------|----------|---------|
+| French | `demo.fr@profileforge.local` | `DemoFr2026!` | Camille Laurent — 5 roles, 4 diplomas, 16 skills, 3 languages, 4 projects, 3 certifications |
+| English | `demo.en@profileforge.local` | `DemoEn2026!` | Alex Morgan — 3 roles, 2 diplomas, 10 skills, 2 languages, 2 projects, 1 certification |
+
+```bash
+npm run seed:demo-fr   # create or refresh the French demo account + profile
+npm run seed:demo-en   # create or refresh the English demo account + profile
+npm run demo:reset     # drop both demo users, then re-seed both from scratch
+```
+
+All three commands are idempotent and safe to re-run; a reseed cleanly replaces the demo profile and
+its sample analysis and never touches rows belonging to other accounts. Each seed also pre-matches
+the demo profile against the sample job descriptions `fixtures/demo-jd-fr.txt` and
+`fixtures/demo-jd-en.txt`, so `/jobs` already shows a reproducible MatchReport without any LLM calls:
+the requirements are hand-extracted (standing in for the LLM extraction step), while matching and
+scoring run the app's real deterministic engine. CV/cover-letter generation (step 4) still needs an
+OpenRouter key — everything up to the MatchReport works keylessly.
+
 ## Tests
 
 ```bash
@@ -170,7 +194,9 @@ version-controlled fixture set in `benchmarks/fixtures/`, compares against the c
   `generation/` (pipeline, plan, draft, fit, render, verify), `llm/` (OpenRouter router + task
   prompts), `settings/`, `validation/`, `auth/`, `profile/` & `jobs/` repositories
 - `src/components/` — UI: shadcn-style primitives (`ui/`), profile editor, generation views
-- `prisma/` — schema (19 models) and migrations; generated client lives in `src/generated/prisma/`
+- `prisma/` — schema (19 models), migrations, and demo seed data (`prisma/seed/`); generated client
+  lives in `src/generated/prisma/`
+- `fixtures/` — sample job descriptions for the demo accounts (see *Demo accounts*)
 - `tests/` — `unit/` + `integration/` (Vitest), `e2e/` (Playwright, seeded through the app's own API)
 - `specs/` — one spec-kit directory per feature slice (see below)
 

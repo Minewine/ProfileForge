@@ -1,0 +1,139 @@
+{
+  "email": "demo.en@profileforge.local",
+  "password": "DemoEn2026!",
+  "profile": {
+    "language": "en",
+    "basics": {
+      "name": "Alex Morgan",
+      "headline": "Senior Full-Stack Engineer — TypeScript · React · Node.js",
+      "summary": "Full-stack engineer with over ten years of experience shipping SaaS products end to end — PostgreSQL schema design, typed Node.js APIs, and React front ends that stay fast under real load. I care about short feedback loops, honest tests, and readable code. Currently building the analytics query layer at Northbeam Labs.",
+      "location": "London, UK",
+      "email": "demo.en@profileforge.local",
+      "phone": "+44 7700 900123",
+      "links": [
+        "https://www.linkedin.com/in/alexmorgan-dev",
+        "https://github.com/alexmorgan-dev"
+      ]
+    },
+    "experiences": [
+      {
+        "company": "Northbeam Labs",
+        "title": "Senior Full-Stack Engineer",
+        "location": "London, UK",
+        "startDate": "2021-06",
+        "endDate": "present",
+        "skillsUsed": ["TypeScript", "React", "Node.js", "Next.js", "PostgreSQL", "GraphQL"],
+        "bullets": [
+          "Built the analytics query layer (Node.js, GraphQL) serving 2M queries per day at a p95 latency under 200 ms.",
+          "Led the customer dashboard migration to Next.js: 38% faster first contentful paint and a shared SSR component library.",
+          "Designed the multi-tenant PostgreSQL schema backing 400+ enterprise accounts — zero cross-tenant incidents in over four years.",
+          "Introduced contract tests (Pact) between the front end and 12 backend services, halving integration regressions.",
+          "Mentored three junior engineers; two were promoted within 18 months."
+        ]
+      },
+      {
+        "company": "Fleetgrid",
+        "title": "Full-Stack Engineer",
+        "location": "Bristol, UK",
+        "startDate": "2018-02",
+        "endDate": "2021-05",
+        "skillsUsed": ["TypeScript", "Node.js", "React", "PostgreSQL", "AWS", "Terraform"],
+        "bullets": [
+          "Built fleet telemetry ingestion on AWS (API Gateway, Lambda, PostgreSQL) peaking at 5,000 vehicle events per second.",
+          "Codified the full stack in Terraform: environment provisioning dropped from two days to 20 minutes.",
+          "Shipped the driver companion back end (auth, offline sync) used daily by 8,000 drivers.",
+          "Cut the monthly AWS bill by 22% by moving batch workloads to spot instances."
+        ]
+      },
+      {
+        "company": "Cobalt Systems",
+        "title": "Software Developer",
+        "location": "Manchester, UK",
+        "startDate": "2016-07",
+        "endDate": "2018-01",
+        "skillsUsed": ["JavaScript", "Node.js", "Jest", "PostgreSQL"],
+        "bullets": [
+          "Developed billing and invoicing modules for a B2B ERP (Node.js, PostgreSQL) used by 60+ SME customers.",
+          "Raised unit-test coverage of the billing core from 12% to 78% with Jest.",
+          "Automated release packaging, cutting release-day effort from six hours to 30 minutes.",
+          "Ran the second-line support rotation and documented 40+ runbooks still in use."
+        ]
+      }
+    ],
+    "educations": [
+      {
+        "institution": "University of Manchester",
+        "degree": "BSc (Hons)",
+        "field": "Computer Science",
+        "startDate": "2012-09",
+        "endDate": "2016-06",
+        "grade": "First Class Honours"
+      },
+      {
+        "institution": "Xaverian College, Manchester",
+        "degree": "A Levels",
+        "field": "Maths, Physics, Computing",
+        "startDate": "2010-09",
+        "endDate": "2012-06",
+        "grade": "A*AAB"
+      }
+    ],
+    "skills": [
+      { "name": "TypeScript", "category": "Languages" },
+      { "name": "JavaScript", "category": "Languages" },
+      { "name": "Node.js", "category": "Backend" },
+      { "name": "React", "category": "Frontend" },
+      { "name": "Next.js", "category": "Frontend" },
+      { "name": "PostgreSQL", "category": "Databases" },
+      { "name": "GraphQL", "category": "APIs" },
+      { "name": "AWS", "category": "Cloud", "aliases": ["Amazon Web Services"] },
+      { "name": "Terraform", "category": "Cloud" },
+      { "name": "Jest", "category": "Testing" }
+    ],
+    "languages": [
+      { "name": "English", "proficiency": "Native" },
+      { "name": "French", "proficiency": "Intermediate (B1)" }
+    ],
+    "projects": [
+      {
+        "name": "RouteHawk",
+        "description": "Open-source command-line tool that estimates delivery-route costs and emissions from UK postcodes (TypeScript).",
+        "link": "https://github.com/alexmorgan-dev/routehawk",
+        "startDate": "2020-03",
+        "endDate": "present",
+        "bullets": [
+          "850 GitHub stars and roughly 30,000 npm downloads per month.",
+          "Adopted by three regional courier startups for quote estimation."
+        ]
+      },
+      {
+        "name": "Design tokens pipeline",
+        "description": "Automated design-token pipeline (Figma to npm package) shared across Northbeam's four product teams.",
+        "startDate": "2022-05",
+        "endDate": "2023-01",
+        "bullets": [
+          "Cut QA-reported UI inconsistencies by 70% within two quarters.",
+          "Tokens are consumed by both the web app and the marketing site from a single source of truth."
+        ]
+      }
+    ],
+    "certifications": [
+      { "title": "AWS Certified Developer – Associate", "issuer": "Amazon Web Services", "issueDate": "2022-03" }
+    ]
+  },
+  "analysis": {
+    "jdFile": "fixtures/demo-jd-en.txt",
+    "jdRole": "Senior Backend Engineer",
+    "jdCompany": "Harborline",
+    "requirements": [
+      { "text": "5+ years of professional experience building backend services with TypeScript", "category": "skill", "importance": "must", "isHardConstraint": true },
+      { "text": "Production experience with PostgreSQL", "category": "tool", "importance": "must", "isHardConstraint": true },
+      { "text": "Experience building and operating services on AWS", "category": "tool", "importance": "must", "isHardConstraint": true },
+      { "text": "Fluent English, written and spoken", "category": "language", "importance": "must", "isHardConstraint": true },
+      { "text": "Experience with PCI DSS or financial compliance", "category": "domain", "importance": "must", "isHardConstraint": true },
+      { "text": "Experience with GraphQL APIs at scale", "category": "skill", "importance": "nice", "isHardConstraint": false },
+      { "text": "Familiarity with Terraform or other infrastructure-as-code tools", "category": "tool", "importance": "nice", "isHardConstraint": false },
+      { "text": "Solid testing culture (Jest, contract tests)", "category": "skill", "importance": "nice", "isHardConstraint": false }
+    ]
+  }
+}

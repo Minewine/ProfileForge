@@ -15,7 +15,10 @@
     "benchmark": "tsx scripts/run-benchmark.ts",
     "e2e:install": "npx playwright install chromium",
     "test:e2e": "docker compose up -d e2e-db && node tests/e2e/scripts/reset-db.mjs && playwright test",
-    "db:assign-owner": "tsx scripts/assign-owner.ts"
+    "db:assign-owner": "tsx scripts/assign-owner.ts",
+    "seed:demo-fr": "tsx prisma/seed/seed-demo.ts fr",
+    "seed:demo-en": "tsx prisma/seed/seed-demo.ts en",
+    "demo:reset": "tsx prisma/seed/seed-demo.ts reset"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

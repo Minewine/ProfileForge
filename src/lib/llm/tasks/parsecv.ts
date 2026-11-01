@@ -1,21 +1,15 @@
 import { z } from "zod";
 import { LanguageCodeSchema, ProfileDraftSchema } from "@/lib/validation/schemas";
 import { registerTask, type ChatMessage } from "@/lib/llm/router";
+import { loadSystemPrompt } from "@/lib/llm/prompts/load";
 
 export const ParseCvInputSchema = z.object({
   text: z.string().min(50),
   language: LanguageCodeSchema,
 });
 
-const SYSTEM_PROMPT = `You are a precise CV parsing engine.
-Rules (non-negotiable):
-- Use ONLY facts present in the provided text. Do NOT invent, infer, or complete employers, titles, dates, skills, tools, metrics, degrees, or achievements.
-- When unsure, OMIT the field entirely.
-- Reproduce bullet text FAITHFULLY — do not polish, merge, split, or rewrite bullets.
-- Return the page locator for every item you extract (the page markers are <<<PAGE n>>>).
-- Dates: return the RAW date string exactly as written (e.g. "Jan 2021", "janv. 2021", "depuis sept. 2023"). Never convert or guess dates.
-- The document may be in French or English; parse both identically and keep proper nouns (companies, institutions, certifications) verbatim.
-- Respond ONLY with a JSON object matching the provided schema. No prose.`;
+// Loaded at import (= registration) time so a missing/empty prompt file fails startup.
+const SYSTEM_PROMPT = loadSystemPrompt("parseCV.md");
 
 export function buildParseCvPrompt(payload: z.infer<typeof ParseCvInputSchema>): ChatMessage[] {
   return [

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { LanguageCodeSchema } from "@/lib/validation/schemas";
 import { registerTask, type ChatMessage } from "@/lib/llm/router";
+import { loadSystemPrompt } from "@/lib/llm/prompts/load";
 
 export const SemanticProposalsInputSchema = z.object({
   language: LanguageCodeSchema,
@@ -30,13 +31,8 @@ export const SemanticProposalsOutputSchema = z.object({
     .max(100),
 });
 
-const SYSTEM_PROMPT = `You match job requirements against a candidate's profile digest.
-Rules (non-negotiable):
-- Propose a match ONLY where the cited profile entries genuinely demonstrate the requirement.
-- Cite EXACT entry IDs from the digest — never invent IDs.
-- If nothing genuinely matches a requirement, return no proposal for it. A missing proposal is a better answer than a wrong one.
-- rationale (optional, ≤200 chars) explains the link; it is display-only.
-- Respond ONLY with JSON matching the schema.`;
+// Loaded at import (= registration) time so a missing/empty prompt file fails startup.
+const SYSTEM_PROMPT = loadSystemPrompt("semanticProposals.md");
 
 export function ensureSemanticProposalsRegistered() {
   registerTask({

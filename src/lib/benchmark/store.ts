@@ -15,6 +15,10 @@ export const BENCHMARK_ROOT = join(process.cwd(), "benchmarks");
 
 export type BenchmarkBaseline = {
   fixtureSetVersion: string;
+  /** Content hash of src/lib/llm/prompts/*.md (computePromptSetVersion).
+   *  Optional only because baselines pinned before prompt versioning lack it —
+   *  comparison treats a missing value as a mismatch, forcing a re-pin. */
+  promptSetVersion?: string;
   pinnedAt: string;
   pinnedBy: string;
   codeState: { sha: string; dirty: boolean };
@@ -26,6 +30,7 @@ export type BenchmarkBaseline = {
 /** Build the baseline document for the current run — every re-pin is auditable. */
 export function buildBaseline(args: {
   fixtureSetVersion: string;
+  promptSetVersion?: string;
   label?: string;
   codeState: { sha: string; dirty: boolean };
   models: Record<string, string>;
@@ -37,6 +42,7 @@ export function buildBaseline(args: {
   }
   return {
     fixtureSetVersion: args.fixtureSetVersion,
+    ...(args.promptSetVersion ? { promptSetVersion: args.promptSetVersion } : {}),
     pinnedAt: new Date().toISOString(),
     pinnedBy: args.label ?? "unspecified",
     codeState: args.codeState,

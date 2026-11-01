@@ -12,7 +12,9 @@ gates automation via exit codes (`0` pass · `1` regressed · `2` incomplete · 
   invalidates old baselines.
 - `baselines/` — **committed source**. One `<fixtureSetVersion>.json` per fixture-set version,
   written ONLY via `npm run benchmark -- --update-baseline` (records `pinnedAt`/`pinnedBy`/models).
-  Never hand-edit.
+  Never hand-edit. Baselines also pin a `promptSetVersion` content hash of
+  `src/lib/llm/prompts/*.md` — a run whose prompts differ from the pinned ones is skipped with a
+  re-pin instruction (prompt changes require re-baselining; see that directory's README).
 - `runs/` — retained run reports, one directory per run (`report.json`, `summary.md`,
   `comparison.md` when a baseline existed). Gitignored local artifacts — delete freely.
 - `transcripts/` — pinned AI responses per fixture-set version (`<version>/<taskId>.jsonl`),

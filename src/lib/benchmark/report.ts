@@ -17,6 +17,7 @@ export const ReportSchema = z.object({
   fixtureSetVersion: z.string().min(1),
   dictionaryVersion: z.literal("v1"),
   codeState: z.object({ sha: z.string(), dirty: z.boolean() }),
+  promptSetVersion: z.string().min(1).optional(),
   config: z.object({
     mode: z.enum(["live", "replay"]),
     models: z.record(z.string(), z.string()),
@@ -105,6 +106,7 @@ export function compareWithBaseline(args: {
   caseResults: CaseResult[];
   baseline: unknown;
   fixtureSetVersion: string;
+  promptSetVersion?: string;
   weakMatchCaseIds: string[];
 }): { comparison: ComparisonOutcome; caseResults: CaseResult[] } {
   const base = args.baseline as BenchmarkBaseline | null;
@@ -124,6 +126,16 @@ export function compareWithBaseline(args: {
         baseline: base.fixtureSetVersion,
         outcome: "skipped",
         reason: `baseline is for fixture-set version ${base.fixtureSetVersion}, current set is ${args.fixtureSetVersion} — re-pin with --update-baseline`,
+      },
+      caseResults: args.caseResults,
+    };
+  }
+  if ((base.promptSetVersion ?? null) !== (args.promptSetVersion ?? null)) {
+    return {
+      comparison: {
+        baseline: base.fixtureSetVersion,
+        outcome: "skipped",
+        reason: `baseline is for prompt set ${base.promptSetVersion ?? "(pinned before prompt versioning)"}, current set is ${args.promptSetVersion ?? "unknown"} — the system prompts changed, re-pin with --update-baseline`,
       },
       caseResults: args.caseResults,
     };
@@ -189,6 +201,7 @@ export function assembleReport(args: {
   config: BenchmarkConfig;
   fixtureSetVersion: string;
   codeState: { sha: string; dirty: boolean };
+  promptSetVersion?: string;
   caseResults: CaseResult[];
   spendUsd: number;
   durationMs: number;
@@ -219,6 +232,7 @@ export function assembleReport(args: {
     fixtureSetVersion: args.fixtureSetVersion,
     dictionaryVersion: "v1",
     codeState: args.codeState,
+    promptSetVersion: args.promptSetVersion,
     config: {
       mode: args.config.mode,
       models: args.config.models,
@@ -251,7 +265,7 @@ export function renderSummaryMd(report: BenchmarkReport): string {  const lines:
   );
   lines.push("");
   lines.push(
-    `fixture set \`${report.fixtureSetVersion}\` · code ${report.codeState.sha}${report.codeState.dirty ? " (dirty)" : ""} · mode ${report.config.mode}${report.keylessMode ? " · **deterministic stages only** (no live AI evaluation)" : ""}`,
+    `fixture set \`${report.fixtureSetVersion}\` · code ${report.codeState.sha}${report.codeState.dirty ? " (dirty)" : ""} · prompts ${report.promptSetVersion ?? "?"} · mode ${report.config.mode}${report.keylessMode ? " · **deterministic stages only** (no live AI evaluation)" : ""}`,
   );
   lines.push("");
   lines.push(

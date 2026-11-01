@@ -105,6 +105,11 @@ async function main(): Promise<number> {
 
     const { loadFixtureSet } = await import("@/lib/benchmark/fixtures");
     const fixtureSet = loadFixtureSet("benchmarks/fixtures");
+    // Prompt-set identity: any byte change to src/lib/llm/prompts/*.md forces a
+    // baseline re-pin (compareWithBaseline), like a fixture-set change does.
+    const { computePromptSetVersion } = await import("@/lib/llm/prompts/load");
+    const promptSetVersion = computePromptSetVersion();
+    console.log(`• prompt set: ${promptSetVersion}`);
 
     // US5: swap the router's transport for record/replay before any case runs.
     // keyless mode needs no AI credentials — replay serves pinned transcripts
@@ -153,6 +158,7 @@ async function main(): Promise<number> {
           caseResults: outcome.caseResults,
           baseline: baselineDoc,
           fixtureSetVersion: fixtureSet.version,
+          promptSetVersion,
           weakMatchCaseIds,
         }));
       }
@@ -165,6 +171,7 @@ async function main(): Promise<number> {
         config,
         fixtureSetVersion: fixtureSet.version,
         codeState: getCodeState(),
+        promptSetVersion,
         caseResults,
         spendUsd: outcome.spendUsd,
         durationMs,
@@ -188,6 +195,7 @@ async function main(): Promise<number> {
           fixtureSet.version,
           buildBaseline({
             fixtureSetVersion: fixtureSet.version,
+            promptSetVersion,
             label: config.label,
             codeState: report.codeState,
             models: config.models,

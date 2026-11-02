@@ -12,17 +12,19 @@ export type UsageRecord = {
   durationMs: number;
 };
 
-const runCosts = new Map<string, number>();
-
-export function setRunCostForTests(runId: string, cost: number) {
-  if (cost === 0) runCosts.delete(runId);
-  else runCosts.set(runId, cost);
-}
-
-/** FR-008: hard stop when the run's accumulated cost reaches the user's configured cap. */
+/**
+ * FR-008: hard stop when the run's accumulated cost reaches the user's configured cap.
+ * Accumulation is derived from the LlmUsageLog rows written by recordUsage, so it
+ * survives a server restart (a module-level Map used to reset it mid-run) and would
+ * hold across multiple app instances.
+ */
 export async function checkRunCap(runId: string, userId: string) {
   const settings = await getSettings(userId);
-  const accumulated = runCosts.get(runId) ?? 0;
+  const row = await db.llmUsageLog.aggregate({
+    where: { runId },
+    _sum: { costUsd: true },
+  });
+  const accumulated = row._sum.costUsd ?? 0;
   if (accumulated >= settings.costCapUsd) {
     throw new ApiError(
       "COST_CAP_REACHED",
@@ -34,7 +36,6 @@ export async function checkRunCap(runId: string, userId: string) {
 }
 
 export async function recordUsage(u: UsageRecord, userId: string) {
-  runCosts.set(u.runId, (runCosts.get(u.runId) ?? 0) + u.costUsd);
   try {
     await db.llmUsageLog.create({
       data: {

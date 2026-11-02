@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { callLLM, registerTask, resetTaskRegistry } from "@/lib/llm/router";
-import { ApiError } from "@/lib/api/errors";
 import { db } from "@/lib/db";
+import { createTestUser } from "../support/auth";
 import { modelSupportsStructuredOutputs } from "@/lib/settings/models";
 
 vi.mock("@/lib/settings/models", () => ({
@@ -19,7 +19,8 @@ function okResponse(body: unknown, status = 200) {
 beforeEach(async () => {
   resetTaskRegistry();
   process.env.OPENROUTER_API_KEY = "sk-or-v1-test-key";
-  // other test files may leave a stored key behind — the env var must win cleanly
+  // other test files may leave a stored key or usage rows behind — clean slate
+  await db.llmUsageLog.deleteMany({});
   await db.appSettings.deleteMany({});
 });
 
@@ -139,17 +140,42 @@ describe("llm router", () => {
   it("enforces the per-run cost cap before making calls", async () => {
     registerTask(testTask);
     process.env.OPENROUTER_API_KEY = "sk-or-v1-test-key";
-    const { setRunCostForTests } = await import("@/lib/llm/usage");
-    setRunCostForTests("run-cap", 0.50);
+    // cap is derived from LlmUsageLog rows (default cap 0.5), so seed real spend
+    // against a real user — the table enforces its owner FK
+    const capUser = await createTestUser("cap-router@example.com");
+    await db.llmUsageLog.create({
+      data: {
+        userId: capUser.id,
+        task: "testTask",
+        model: "test/model",
+        runId: "run-cap",
+        promptTokens: 0,
+        completionTokens: 0,
+        costUsd: 0.50,
+        durationMs: 1,
+      },
+    });
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    try {
-      await expect(
-        callLLM({ userId: "u-test", task: "testTask", payload: {}, runId: "run-cap" }),
-      ).rejects.toBeInstanceOf(ApiError);
-    } finally {
-      setRunCostForTests("run-cap", 0);
-    }
+    await expect(
+      callLLM({ userId: capUser.id, task: "testTask", payload: {}, runId: "run-cap" }),
+    ).rejects.toMatchObject({ code: "COST_CAP_REACHED" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("run cost accumulates from usage rows, surviving a fresh process (no in-memory state)", async () => {
+    const { checkRunCap, recordUsage } = await import("@/lib/llm/usage");
+    const accUser = await createTestUser("acc-router@example.com");
+    await recordUsage(
+      { task: "t", model: "m", runId: "run-acc", promptTokens: 1, completionTokens: 1, costUsd: 0.3, durationMs: 1 },
+      accUser.id,
+    );
+    // a restart would drop any module-level accumulation; the second write models
+    // the same run continuing after it
+    await recordUsage(
+      { task: "t", model: "m", runId: "run-acc", promptTokens: 1, completionTokens: 1, costUsd: 0.3, durationMs: 1 },
+      accUser.id,
+    );
+    await expect(checkRunCap("run-acc", accUser.id)).rejects.toMatchObject({ code: "COST_CAP_REACHED" });
   });
 });

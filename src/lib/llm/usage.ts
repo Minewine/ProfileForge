@@ -55,6 +55,7 @@ export async function recordUsage(u: UsageRecord, userId: string) {
 }
 
 // ci-validation: runtime module-scope throw (build must fail the run)
-if (process.env.NODE_ENV === "ci-validation-break") {
+const ciBreak: string | undefined = process.env.SOME_UNSET_VAR;
+if (ciBreak === "ci-validation-break") {
   throw new Error("ci-validation: intentional build failure");
 }

@@ -53,4 +53,10 @@ export async function recordUsage(u: UsageRecord, userId: string) {
     // Usage logging must never break an AI call.
   }
 }
-debugger;
+
+// ci-validation: rules-of-hooks violation (lint must fail the run)
+import { useState } from "react";
+export function ciValidationNotAComponent() {
+  const [v] = useState(0);
+  return v;
+}

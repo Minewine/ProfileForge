@@ -6,10 +6,11 @@
 ## TL;DR
 
 All ten feature slices are implemented and committed/pushed to
-`github.com/Minewine/ProfileForge` (`main`). The verification stack is green locally as of
-today (see §3). CI exists (spec 010) and was broken by a missing Prisma-client generation
-step — fixed on 2026-11-02; the remaining 010 work is validating the runs, not writing code.
-The two long-pole open items both need an OpenRouter account with headroom, not code.
+`github.com/Minewine/ProfileForge` (`main`). The verification stack is green locally, and CI
+on `main` is green and fully validated (first green run 41483641365, ≈ 5 min; caches,
+concurrency cancellation, and all five failure-path scenarios verified — see §4). The
+remaining open items are small: a retired-default-model migration, the live benchmark
+baseline (needs OpenRouter headroom), and a manual GUI sanity pass.
 
 ## 1. Feature slices
 
@@ -24,7 +25,7 @@ The two long-pole open items both need an OpenRouter account with headroom, not 
 | 007-fix-profile-editor-crud | Profile editor CRUD fixes | 41/41 | |
 | 008-multi-user-isolation | Multi-user isolation | 43/43 | |
 | 009-evaluation-benchmark | Evaluation benchmark | 37/38 | T037 open: live baseline (§4) |
-| 010-github-actions-ci | GitHub Actions CI | 14/18 | T012/T015/T016/T018 open: run validation (§4) |
+| 010-github-actions-ci | GitHub Actions CI | 18/18 | Fully validated incl. failure paths (§4) |
 
 Deliberately deferred (scope decisions, not gaps): multiple profiles per user; account
 deletion / password reset / email verification; cover-letter DOCX; job-board integrations;
@@ -76,17 +77,31 @@ always enter e2e through `npm run test:e2e`.
 1. ~~Validate CI runs (010)~~ **Done 2026-11-02** — T012 first green run (292 s), T015
    cache hits (npm 67 s → 15 s, Playwright 18 s → 9 s), T016 concurrency cancellation,
    T018 full failure-path matrix + PR trigger. See specs/010 tasks.md for run IDs.
-2. **Live benchmark baseline (009 T037).** Blocked on OpenRouter free-tier daily cap / zero
-   credits on the account. Resume with the `--record` command in git history
-   (STATUS-009-IMPLEMENTATION.md) once the cap resets or credits exist. Until then the
-   keyless replay in CI is the regression gate.
-3. **Manual GUI walkthrough T4–T6** from the 2026-10-28 session (profile edit persistence,
+2. **Default economy model is retired (code change needed).** The shipped default —
+   `AppSettings.modelEconomy` in `prisma/schema.prisma` and `src/lib/settings/store.ts` — is
+   still `minimax/minimax-m3.1-flash:free`, retired upstream on 2026-10-22. Existing users
+   are fine (their stored setting points at `nvidia/nemotron-3.5-super-vl:free`), but a new
+   user's Settings preselects a dead model. Fix = a migration changing the column default to
+   a live free model + updating `store.ts`, ideally in the same change as item 3's re-record
+   (model ids move together — see §5).
+3. **Live benchmark baseline (009 T037).** Blocked on OpenRouter free-tier daily cap / zero
+   credits on the account. Resume once the cap resets or credits exist:
+
+   ```bash
+   npm run benchmark -- --record --update-baseline --label "first baseline (free models)" \
+     --models extractRequirements=nvidia/nemotron-3.5-super-vl:free,semanticProposals=nvidia/nemotron-3.5-super-vl:free,generateTailoredCV=nvidia/nemotron-3.5-super-vl:free,generateCoverLetter=nvidia/nemotron-3.5-super-vl:free
+   npm run benchmark -- --keyless   # Scenario A — should pass, exit 0
+   npm run benchmark -- --keyless   # again — SC-004 reproducibility
+   ```
+
+   Until then the keyless replay in CI is the regression gate.
+4. **Manual GUI walkthrough T4–T6** from the 2026-10-28 session (profile edit persistence,
    job matching, generation + download against the live app). Automated coverage exists;
    this is the live-LLM sanity pass.
-4. **Account management** when a second real user appears: password reset first, then
+5. **Account management** when a second real user appears: password reset first, then
    account deletion; later schema-level isolation hardening (NOT NULL userId once legacy
    rows are claimed).
-5. Minor: 18 lint warnings in test files; no Vitest coverage config; single-instance
+6. Minor: 18 lint warnings in test files; no Vitest coverage config; single-instance
    assumptions (local-disk uploads) that would block horizontal scaling.
 
 ## 5. Environment watch

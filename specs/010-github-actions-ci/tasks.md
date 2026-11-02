@@ -93,8 +93,10 @@ All steps append to the single job in `.github/workflows/ci.yml`, in this order 
 
 ### Implementation for User Story 3
 
-- [ ] T015 [US3] Validate cache behavior (SC-005): trigger a second run without changing `package-lock.json` and compare step durations against T012's recorded timings. The `actions/setup-node` npm cache must hit; the `~/.cache/ms-playwright` cache must hit. If a cache never hits, fix the cache key (lockfile path / playwright version extraction) — caching is an optimization, so a miss must never fail the run (spec Edge Cases).
-- [ ] T016 [US3] Validate run economy (FR-008, FR-009, SC-004, SC-006): confirm the workflow defines exactly one job, no matrix, no paid services; push two commits in quick succession to the same branch and confirm the first run is cancelled by the concurrency group; confirm final total duration stays under 15 minutes.
+- [x] T015 [US3] Validate cache behavior (SC-005): trigger a second run without changing `package-lock.json` and compare step durations against T012's recorded timings. The `actions/setup-node` npm cache must hit; the `~/.cache/ms-playwright` cache must hit. If a cache never hits, fix the cache key (lockfile path / playwright version extraction) — caching is an optimization, so a miss must never fail the run (spec Edge Cases).
+  - 2026-11-02: run 41483641365 vs 41484737323 (identical lockfile): Install dependencies 67 s → 15 s, Install Playwright chromium 18 s → 9 s. Both caches hit; no cache step ever fails the run.
+- [x] T016 [US3] Validate run economy (FR-008, FR-009, SC-004, SC-006): confirm the workflow defines exactly one job, no matrix, no paid services; push two commits in quick succession to the same branch and confirm the first run is cancelled by the concurrency group; confirm final total duration stays under 15 minutes.
+  - 2026-11-02: one job, no matrix, no paid services (ci.yml). Two pushes 3 s apart → run 41484722550 cancelled by the concurrency group, 41484737323 completed green. Duration ≈ 5 min, well under the 15-minute budget.
 
 **Checkpoint**: Pipeline is fast and free-tier-safe.
 

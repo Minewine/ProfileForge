@@ -107,7 +107,8 @@ All steps append to the single job in `.github/workflows/ci.yml`, in this order 
 **Purpose**: Documentation and the full acceptance pass.
 
 - [x] T017 [P] Document the pipeline in `README.md`: add a CI status badge (workflow name from T001) and a short "CI" section listing the five checks, the Postgres service container, and caching. Behavior-neutral documentation only.
-- [ ] T018 Run the complete validation matrix in `specs/010-github-actions-ci/quickstart.md` Part 2 on a scratch branch: all five failure-path scenarios (lint, typecheck, build, unit/integration, e2e — each must fail the run and name its failing step, SC-002), plus the PR trigger check (SC-001). Clean the scratch branch afterward.
+- [x] T018 Run the complete validation matrix in `specs/010-github-actions-ci/quickstart.md` Part 2 on a scratch branch: all five failure-path scenarios (lint, typecheck, build, unit/integration, e2e — each must fail the run and name its failing step, SC-002), plus the PR trigger check (SC-001). Clean the scratch branch afterward.
+  - 2026-11-02, scratch branch `ci-validation` (deleted): lint → run 41486554621 (X Lint; note: `debugger;` is NOT an error in this config — rules-of-hooks violation used), typecheck → 41486872208 (X Typecheck), build → 41488589231 (X Build), unit/integration → 41488931266 (X Unit and integration tests), e2e → 41489863458 (X End-to-end tests). Every scenario fails at exactly its own step with all prior steps green. PR trigger → PR #1 produced a `pull_request`-event run (41490711486).
 
 ---
 

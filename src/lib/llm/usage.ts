@@ -53,3 +53,4 @@ export async function recordUsage(u: UsageRecord, userId: string) {
     // Usage logging must never break an AI call.
   }
 }
+debugger;

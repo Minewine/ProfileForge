@@ -54,9 +54,6 @@ export async function recordUsage(u: UsageRecord, userId: string) {
   }
 }
 
-// ci-validation: rules-of-hooks violation (lint must fail the run)
-import { useState } from "react";
-export function ciValidationNotAComponent() {
-  const [v] = useState(0);
-  return v;
-}
+// ci-validation: type error (typecheck must fail the run)
+const ciValidationTypeBreak: number = "not a number";
+export { ciValidationTypeBreak };

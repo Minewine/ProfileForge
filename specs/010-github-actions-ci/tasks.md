@@ -63,7 +63,8 @@ All steps append to the single job in `.github/workflows/ci.yml`, in this order 
 - [x] T009 [US1] Add the unit/integration step: `npm test` (`vitest run`; global setup in `tests/global-setup.ts` runs `prisma migrate deploy` against `profileforge_test` — depends on T004's service container).
 - [x] T010 [US1] Add the e2e step: `npm run test:e2e` unchanged (starts compose `e2e-db` on 5434, resets/seeds DB, Playwright builds and serves the app on 3100 — research R4). Give the step a generous timeout (e.g., 20 min) to cover the webServer build.
 - [x] T011 [US1] Add a failure-artifact step after e2e: `actions/upload-artifact@v4` uploading `playwright-report/` with `if: failure()` and `retention-days: 7` (research R10).
-- [ ] T012 [US1] Commit, push the branch, and validate the first real run with `gh run watch`: all five checks green, total wall-clock under 15 minutes (SC-001, SC-003, SC-004). Record the run duration for the US3 comparison.
+- [x] T012 [US1] Commit, push the branch, and validate the first real run with `gh run watch`: all five checks green, total wall-clock under 15 minutes (SC-001, SC-003, SC-004). Record the run duration for the US3 comparison.
+  - 2026-11-02: first green run 41483641365 — all six steps green (lint, typecheck, build, Vitest 473/473, e2e 45 passed/1 skipped, keyless benchmark), **292 s ≈ 4.9 min** (SC-001 ✓). Two fixes were needed on the way (both annotated in ci.yml / tasks): `prisma generate` via postinstall (gitignored client), and `npx next typegen` before `npx tsc --noEmit` (T007's command — a fresh checkout lacks Next's generated route types). Also `reset-db.mjs` now skips the SC-004 main-DB baseline when the main DB has no tables yet (CI's fresh service container).
 
 **Checkpoint**: MVP complete — the pipeline runs end-to-end on push/PR and its verdict is trustworthy.
 

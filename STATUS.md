@@ -72,10 +72,10 @@ always enter e2e through `npm run test:e2e`.
 
 ## 4. Open items (ordered)
 
-1. **Validate CI runs (010 T012/T015/T016/T018).** T012: confirm the first green run after
-   the 2026-11-02 fix and record duration. T015: cache hits on a second run. T016:
-   concurrency cancellation + < 15 min wall clock. T018: failure-path matrix on a scratch
-   branch. These are observability tasks — no code expected.
+1. **Validate CI runs (010 T015/T016/T018).** T012 is done (first green run 41483641365,
+   292 s ≈ 4.9 min). Remaining: cache-hit comparison (T015), concurrency-cancellation check
+   (T016), and the failure-path matrix on a scratch branch (T018). Observability only — no
+   code expected.
 2. **Live benchmark baseline (009 T037).** Blocked on OpenRouter free-tier daily cap / zero
    credits on the account. Resume with the `--record` command in git history
    (STATUS-009-IMPLEMENTATION.md) once the cap resets or credits exist. Until then the
@@ -97,3 +97,5 @@ always enter e2e through `npm run test:e2e`.
   `.github/workflows/ci.yml` in the same change — the keyless replay hash includes the
   model id, so CI and transcripts must move together.
 - **Ports:** db 5435, e2e-db 5434 (both compose). CI uses its own 5432 service container.
+
+- 2026-11-02: green run 41483641365 (292 s) — see specs/010 tasks.md T012.

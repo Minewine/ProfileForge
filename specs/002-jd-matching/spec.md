@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-21
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Slice 2: Job Description analysis + deterministic matching. Scope: user pastes a job description; system extracts requirements (must/nice, hard constraints) via LLM; deterministic matching against the Profile (exact, approved-alias, semantic) producing a MatchReport with overallScore, scoreBreakdown, RequirementMatch entries with EvidenceRef, recommended and missing keywords; evidence-aware (every match points at concrete profile entries); no CV or cover letter generation in this slice (Slice 3)."
 

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-26
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Investigate and fix the profile editor so users can add, edit, and remove entries. Current problem: on /profile existing fields cannot be changed; new bullets cannot be added to experience entries; adding skills, languages, or other items does not work. Requirements: full CRUD on Experience (including bullets), Education, Skills, Languages, and other profile sections; autosave must persist changes and survive a page reload; clear error messages if a save fails; do not break existing generation, Fact Guard, or template export behavior."
 

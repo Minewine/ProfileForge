@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-24
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Add an end-to-end test suite that verifies the full profile editing flow with sample data. Scope: Seed or upload a sample CV (include both French and English content if easy); Verify the profile loads and displays existing entries; Test full CRUD on the profile editor: Add / edit / remove an Experience entry (including bullets), Add / edit / remove a Role or title within experience, Add / edit / remove Languages, Add / edit / remove Skills, Education, Projects, Certifications; Confirm autosave works and changes persist after reload; Confirm version history captures the edits; Confirm Fact Guard / provenance rules are respected (no silent invention); Clean up or isolate test data so it doesn't pollute the main profile. Use the existing Profile schema and editor routes. Output should be a runnable test (Playwright, Cypress, or the project's current test runner) plus any required sample fixtures."
 

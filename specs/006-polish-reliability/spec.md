@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-25
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Polish and reliability slice: Fix any loading or error states found in smoke testing; Improve Fact Guard UX (clear messages when export is blocked); Add basic loading indicators during generation; Ensure the designed two-column template and the single-column ATS template both export cleanly."
 

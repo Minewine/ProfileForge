@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-28
 
-**Status**: Draft
+**Status**: Implemented — run validation pending (T012/T015/T016/T018)
 
 **Input**: User description: "Add GitHub Actions CI for ProfileForge. On push and pull request, run lint, typecheck, build, Vitest, and Playwright e2e. Use a Postgres service container for the database. Cache dependencies. Fail the build on any test or lint error. Keep the workflow simple and fast enough for the free tier. Do not change application behavior. Only add the CI configuration and any minimal supporting files."
 

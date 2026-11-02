@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-21
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Build ProfileForge, a web application that helps users create highly ATS-optimized, interview-maximizing CVs and cover letters. User flow: 1. User uploads an existing CV (PDF/DOCX). System parses it into a structured profile (experience, education, skills, languages, etc.) with provenance. 2. User can manually enrich the profile with additional experience, qualifications, projects, and languages. 3. User pastes a job description. 4. System uses the user's OpenRouter API key to: extract requirements from the JD; match against the profile (exact + semantic); generate a tailored CV from one of several ATS-friendly templates; generate a matching cover letter. 5. User can download the CV as a clean, text-layer PDF. Key constraints: strict fact-guarding (never invent experience or metrics); ATS-friendly output (single column, standard headings, no graphics that break parsers); match report that shows evidence and gaps (usable for interview prep); page-budget awareness during generation; multi-template support. MVP scope only — no automated job searching yet."
 

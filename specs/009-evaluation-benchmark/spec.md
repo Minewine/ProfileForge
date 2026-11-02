@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-28
 
-**Status**: Draft
+**Status**: Implemented — live baseline capture pending (T037)
 
 **Input**: User description: "Add an Evaluation benchmark module that measures generation quality and Fact Guard effectiveness against a fixed set of profile + JD fixtures. It should catch regressions in prompt changes or model swaps and reinforce the zero-invention guarantee."
 

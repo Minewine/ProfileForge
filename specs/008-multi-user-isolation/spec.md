@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-26
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Add multi-user support so each user has their own isolated profile. Scope: user registration and login (email + password, or magic link if simpler); each authenticated user gets their own Profile, CVs, MatchReports, and generated documents; existing single-user local data migratable or cleanly separated; OpenRouter API key remains per-user (stored encrypted, as today); all current features work unchanged once a user is logged in; unauthenticated users see only login/register; keep the implementation as simple as possible for an MVP (no teams, no sharing, no roles beyond basic user)."
 

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-25
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Refine CV generation so that content selection and rewriting are explicit and evidence-backed. Required behavior: When generating a CV from a MatchReport, the system must: 1. Select the most relevant Experience entries and Roles from the profile (based on match evidence, recency, and strength). 2. Tweak/rephrase the selected bullets and titles for the target job (emphasize, shorten, reorder) while preserving factual integrity. 3. Attach sourceBulletIds / provenance to every rewritten bullet. 4. Generate a custom Professional Summary / About Me section that synthesizes the most important points from: the job’s key requirements + the strongest matching evidence in the profile. 5. Include an inspectable omissions list for any profile content that was left out. Fact Guard still blocks export if any material claim cannot be traced to the profile. Output language (FR/EN) is user-selectable and applied to both the summary and the rewritten bullets. Update the Slice 3 spec (or create a focused follow-up) so this selection + rewriting + summary behavior is a first-class, testable requirement."
 

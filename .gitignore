@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -57,7 +58,6 @@ tests/e2e/.seed-state.json
 # E2E auth state (specs/008)
 tests/e2e/.auth-state.json
 gui-test-screenshots/
-uploads-e2e/
 
 # Benchmark (spec 009) — run reports & uploads are local artifacts;
 # baselines, fixtures, and transcripts stay committed

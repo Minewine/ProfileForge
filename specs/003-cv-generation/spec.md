@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-22
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Slice 3: Evidence-aware CV + cover letter generation with Fact Guard and ATS export. Scope: From a finalized MatchReport, generate a tailored CV and cover letter. Content selection is evidence-aware (relevance + strength + impact + recency); every material claim carries sourceBulletIds / provenance. Fact Guard runs before export: unsupported material claims are blockers that prevent download until resolved or user-confirmed. Single single-column ATS template (standard headings, text-layer PDF, no essential content in headers/footers/images). Automated text-extraction completeness check on every PDF; block and regenerate if it fails. User chooses output language (French or English), independent of source. Omissions list is inspectable and reversible. No automated job search; no multi-template support (deferred)."
 

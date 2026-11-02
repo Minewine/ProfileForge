@@ -84,7 +84,7 @@ provenance via `GET .../document`, omission restore via
 ## Setup
 
 ```bash
-docker compose up -d        # PostgreSQL on host port 5433
+docker compose up -d        # PostgreSQL on host port 5435
 cp .env.example .env        # then edit values
 npx prisma migrate dev      # apply schema
 npm run dev                 # http://localhost:3000
@@ -94,7 +94,7 @@ npm run dev                 # http://localhost:3000
 
 | Var | Purpose |
 |-----|---------|
-| `DATABASE_URL` | Postgres connection (docker compose default: `postgresql://profileforge:profileforge@localhost:5433/profileforge`) |
+| `DATABASE_URL` | Postgres connection (docker compose default: `postgresql://profileforge:profileforge@localhost:5435/profileforge`) |
 | `OPENROUTER_API_KEY` | your key; alternatively save it in the Settings UI (stored AES-256-GCM encrypted) |
 | `APP_SECRET` | 32+ chars; encrypts a Settings-stored key (auto-generated `.appsecret` fallback) |
 | `UPLOADS_DIR` | where uploaded CVs are stored (default `./uploads`) |

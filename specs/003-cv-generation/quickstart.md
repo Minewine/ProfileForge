@@ -1,6 +1,6 @@
 # Quickstart — Slice 3 Validation Guide
 
-Prerequisites: `docker compose up -d` (Postgres on :5433), `.env` set (`DATABASE_URL`, `OPENROUTER_API_KEY`), `npm run db:migrate`, `npm run fixtures` (regenerates test CVs). A profile imported from `tests/fixtures/cv-en.pdf` (or `cv-fr.pdf`) and a **matched** analysis (finalize requirements → run match in `/jobs/[id]`) are the pipeline's entry conditions — see `specs/002-jd-matching/quickstart.md` scenarios 1–5 to produce one.
+Prerequisites: `docker compose up -d` (Postgres on :5435), `.env` set (`DATABASE_URL`, `OPENROUTER_API_KEY`), `npm run db:migrate`, `npm run fixtures` (regenerates test CVs). A profile imported from `tests/fixtures/cv-en.pdf` (or `cv-fr.pdf`) and a **matched** analysis (finalize requirements → run match in `/jobs/[id]`) are the pipeline's entry conditions — see `specs/002-jd-matching/quickstart.md` scenarios 1–5 to produce one.
 
 ## Automated checks
 

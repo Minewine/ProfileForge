@@ -15,7 +15,7 @@ import pg from "pg";
 export const E2E_DATABASE_URL =
   process.env.E2E_DATABASE_URL ?? "postgresql://profileforge:profileforge@localhost:5434/profileforge_e2e";
 const MAIN_DATABASE_URL =
-  process.env.DATABASE_URL ?? "postgresql://profileforge:profileforge@localhost:5433/profileforge";
+  process.env.DATABASE_URL ?? "postgresql://profileforge:profileforge@localhost:5435/profileforge";
 
 function abort(reason) {
   console.error(`\n✋ E2E reset ABORTED before any mutation: ${reason}`);

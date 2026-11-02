@@ -14,7 +14,7 @@ tailoring and verified PDF export ([003](specs/003-cv-generation)), profile-edit
 ([005](specs/005-cv-selection-refinement)), polish & reliability ([006](specs/006-polish-reliability)),
 profile-editor CRUD fix ([007](specs/007-fix-profile-editor-crud)), multi-user isolation
 ([008](specs/008-multi-user-isolation)), and the evaluation benchmark
-([009](specs/009-evaluation-benchmark)). Full status report: [CONSOLIDATION.md](CONSOLIDATION.md).
+([009](specs/009-evaluation-benchmark)). Full status report: [STATUS.md](STATUS.md).
 
 ## What works today
 
@@ -165,7 +165,7 @@ database URL targets `profileforge_e2e`. LLM calls are mocked in vitest; the E2E
 ### CI (specs/010-github-actions-ci)
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the same checks on every push and pull request, in one
-job: lint → typecheck (`npx tsc --noEmit`) → build → Vitest → Playwright e2e → keyless benchmark
+job: lint → typecheck (`next typegen && tsc --noEmit`) → build → Vitest → Playwright e2e → keyless benchmark
 (deterministic regression gate over matching/selection/render, no AI key) — any failure fails the run.
 The Vitest suite runs against a Postgres 16 **service container** (same image/credentials as compose
 `db`; the harness auto-creates and migrates `profileforge_test` there), while e2e keeps using its own
@@ -207,7 +207,7 @@ Each slice has a directory under `specs/` (`001-ats-cv-tailoring` … `008-multi
 `quickstart.md` (validation scenarios), and `tasks.md` (checked-off task list). Slice 001 is the
 parent spec and the best starting point for architecture.
 The authoritative product reference is [ProfileForge-Specification.md](ProfileForge-Specification.md);
-[CONSOLIDATION.md](CONSOLIDATION.md) tracks what is done, what is verified, and what to build next.
+[STATUS.md](STATUS.md) tracks what is done, what is verified, and what to build next.
 
 ## Notes
 

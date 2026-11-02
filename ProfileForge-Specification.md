@@ -9,9 +9,9 @@
 
 ---
 
-## Current Status (2026-10-28)
+## Current Status (2026-11-02)
 
-**Implemented and verified — all eight slices.** The MVP scope above has been delivered, then extended:
+**Implemented and verified — all ten slices.** The MVP scope above has been delivered, then extended:
 
 | Slice | Scope | Status |
 |---|---|---|
@@ -23,7 +23,8 @@
 | [006-polish-reliability](specs/006-polish-reliability) | Loading/error/blocked-state UX, progress, dual-template export | Implemented |
 | [007-fix-profile-editor-crud](specs/007-fix-profile-editor-crud) | Profile editor CRUD + autosave restoration | Implemented |
 | [008-multi-user-isolation](specs/008-multi-user-isolation) | Accounts, sessions, per-user isolation, per-user encrypted keys | Implemented |
-| [009-evaluation-benchmark](specs/009-evaluation-benchmark) | Evaluation benchmark: generation quality over a pinned fixture set; baseline gating; keyless mode | Implemented |
+| [009-evaluation-benchmark](specs/009-evaluation-benchmark) | Evaluation benchmark: generation quality over a pinned fixture set; baseline gating; keyless mode | Implemented (live baseline capture pending — T037) |
+| [010-github-actions-ci](specs/010-github-actions-ci) | GitHub Actions CI: lint, typecheck, build, Vitest, e2e, keyless benchmark on push/PR | Implemented and fully validated |
 
 Deviations from this document: **multi-user is no longer deferred** (Slice 008 shipped accounts,
 isolation, and per-user keys; a second template — designed two-column — also shipped). The
@@ -31,10 +32,11 @@ isolation, and per-user keys; a second template — designed two-column — also
 Still deferred by design: multiple profiles per user, account deletion / password reset / email
 verification, job-board integrations.
 
-Verification (2026-10-28): production build green; Vitest 494/494 (incl. 74 benchmark tests);
-Playwright e2e 45 passed / 1 skipped (the live upload/parse scenario self-skips without an
-OpenRouter key); ESLint 0 errors. Known gaps and prioritized next steps:
-[CONSOLIDATION.md](CONSOLIDATION.md).
+Verification (2026-11-02): production build green; Vitest 473/473; Playwright e2e 45 passed /
+1 skipped (the live upload/parse scenario self-skips without an OpenRouter key); ESLint 0 errors;
+CI on `main` green (run 41483641365, ≈ 5 min, all six checks). The one open item is 009 T037 —
+recording the live benchmark baseline — blocked on OpenRouter free-tier headroom. Full status:
+[STATUS.md](STATUS.md).
 
 ---
 

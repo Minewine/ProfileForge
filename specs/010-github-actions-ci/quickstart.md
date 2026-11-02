@@ -35,7 +35,7 @@ Expected: migrations apply to the auto-created `profileforge_test` database and 
 
 ```bash
 npm run lint
-npx tsc --noEmit
+npx next typegen && npx tsc --noEmit
 npm run build
 ```
 
@@ -64,8 +64,8 @@ Expected: one run for the push; all five checks (lint, typecheck, build, unit/in
 
 | Scenario | Do | Expect |
 |----------|----|--------|
-| Lint fails | Add a file with a deliberate ESLint error (e.g., unused var per config) | Run fails; lint step is the failing step |
-| Type error | Add a type-incorrect statement | Run fails at `tsc --noEmit` |
+| Lint fails | Add a deliberate ESLint **error** (e.g., a React hook called outside a component — rules-of-hooks is error-level; `debugger;` and unused vars are not) | Run fails; lint step is the failing step |
+| Type error | Add a type-incorrect statement | Run fails at the Typecheck step (`next typegen && tsc --noEmit`) |
 | Build breaks | Introduce an invalid import in a page | Run fails at `npm run build` |
 | Unit/integration fails | Flip an assertion in one `tests/**/*.test.ts` | Run fails at the vitest step |
 | E2e fails | Temporarily alter an expected e2e behavior | Run fails at the e2e step; Playwright HTML report artifact is attached to the run |

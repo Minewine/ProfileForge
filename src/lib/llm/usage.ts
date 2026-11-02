@@ -54,6 +54,7 @@ export async function recordUsage(u: UsageRecord, userId: string) {
   }
 }
 
-// ci-validation: type error (typecheck must fail the run)
-const ciValidationTypeBreak: number = "not a number";
-export { ciValidationTypeBreak };
+// ci-validation: runtime module-scope throw (build must fail the run)
+if (process.env.NODE_ENV === "ci-validation-break") {
+  throw new Error("ci-validation: intentional build failure");
+}

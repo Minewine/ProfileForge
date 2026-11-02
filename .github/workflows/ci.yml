@@ -9,7 +9,9 @@
 # deterministic pipeline (matching, selection, render verification) — the
 # harness self-provisions `profileforge_benchmark` on the service container and
 # needs no AI key (spec 009 Scenario A). All commands are the project's existing
-# npm scripts, invoked unchanged.
+# npm scripts, invoked unchanged. `npm ci` triggers `prisma generate` via the
+# package.json postinstall hook — src/generated/ is gitignored, so the client
+# must be regenerated on every fresh checkout.
 name: CI
 
 on:
@@ -49,6 +51,13 @@ jobs:
     env:
       DATABASE_URL: postgresql://profileforge:profileforge@localhost:5432/profileforge
       NEXT_TELEMETRY_DISABLED: "1"
+      # Free OpenRouter models for the keyless benchmark replay. Keyless mode
+      # never calls the network — the model id only feeds the transcript input
+      # hash, so this MUST match the committed transcripts' recording run.
+      # When a free model is retired upstream (minimax-m3.1-flash:free was, in
+      # Oct 2026), re-record with `npm run benchmark -- --record` using the new
+      # models and update this line in the same commit.
+      BENCHMARK_FREE_MODELS: extractRequirements=nvidia/nemotron-3.5-super-vl:free,semanticProposals=nvidia/nemotron-3.5-super-vl:free,generateTailoredCV=nvidia/nemotron-3.5-super-vl:free,generateCoverLetter=nvidia/nemotron-3.5-super-vl:free
 
     steps:
       - uses: actions/checkout@v4
@@ -96,7 +105,7 @@ jobs:
       - name: Keyless benchmark (deterministic regression gate)
         run: >-
           npm run benchmark -- --keyless
-          --models extractRequirements=nvidia/nemotron-3.5-super-vl:free,semanticProposals=nvidia/nemotron-3.5-super-vl:free,generateTailoredCV=nvidia/nemotron-3.5-super-vl:free,generateCoverLetter=nvidia/nemotron-3.5-super-vl:free
+          --models "$BENCHMARK_FREE_MODELS"
         timeout-minutes: 5
 
       - name: Upload Playwright report on failure

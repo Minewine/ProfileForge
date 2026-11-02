@@ -53,6 +53,3 @@ export async function recordUsage(u: UsageRecord, userId: string) {
     // Usage logging must never break an AI call.
   }
 }
-
-// ci-validation: unconditional runtime throw (build must fail the run)
-throw new Error("ci-validation: intentional build failure");

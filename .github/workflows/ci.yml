@@ -87,7 +87,9 @@ jobs:
         run: npm run lint
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        # LayoutProps and the route types come from Next's generated types;
+        # typegen produces them without a full build (docs: cli/next.md).
+        run: npx next typegen && npx tsc --noEmit
 
       - name: Build
         run: npm run build

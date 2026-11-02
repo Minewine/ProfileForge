@@ -62,19 +62,30 @@ console.log("• applying migrations (prisma migrate deploy → e2e DB only)…"
 run("npx", ["prisma", "migrate", "deploy"], { DATABASE_URL: E2E_DATABASE_URL });
 
 // SC-004 baseline: snapshot the MAIN database state so a full run can prove it
-// was untouched. Read-only; never writes.
+// was untouched. Read-only; never writes. A MAIN database with no tables yet
+// (e.g. CI's fresh service container, which nothing has migrated) has nothing
+// to protect — the baseline is skipped rather than fatal.
 const baseline = await withClient(MAIN_DATABASE_URL, async (client) => {
-  const profile = await client.query('SELECT version FROM "Profile" ORDER BY "updatedAt" DESC LIMIT 1');
-  const tables = ["Experience", "Education", "Skill", "LanguageSkill", "Project", "Certification", "Bullet"];
-  const counts = {};
-  for (const table of tables) {
-    const count = await client.query(`SELECT COUNT(*)::int AS n FROM "${table}"`);
-    counts[table] = count.rows[0].n;
+  try {
+    const profile = await client.query('SELECT version FROM "Profile" ORDER BY "updatedAt" DESC LIMIT 1');
+    const tables = ["Experience", "Education", "Skill", "LanguageSkill", "Project", "Certification", "Bullet"];
+    const counts = {};
+    for (const table of tables) {
+      const count = await client.query(`SELECT COUNT(*)::int AS n FROM "${table}"`);
+      counts[table] = count.rows[0].n;
+    }
+    return { profileVersion: profile.rows[0]?.version ?? null, counts };
+  } catch (err) {
+    if (err.code === "42P01") return null;
+    throw err;
   }
-  return { profileVersion: profile.rows[0]?.version ?? null, counts };
 });
-console.log("• MAIN database baseline (must be identical after the run — SC-004):");
-console.log(`  Profile.version = ${baseline.profileVersion}`);
-console.log(`  ${JSON.stringify(baseline.counts)}`);
+if (baseline) {
+  console.log("• MAIN database baseline (must be identical after the run — SC-004):");
+  console.log(`  Profile.version = ${baseline.profileVersion}`);
+  console.log(`  ${JSON.stringify(baseline.counts)}`);
+} else {
+  console.log("• MAIN database has no tables yet (fresh container?) — SC-004 baseline skipped.");
+}
 
 console.log("✓ e2e database reset complete.");

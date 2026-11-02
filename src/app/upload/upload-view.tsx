@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,12 @@ import { Dialog } from "@/components/ui/dialog";
 import { SiteNav } from "@/components/site-nav";
 import { Select } from "@/components/ui/select";
 import { describeError, type DescribedError } from "@/lib/client-messages";
+
+// The upload workspace's server state (extracted text, parse draft) lives on the
+// SourceDocument row; this pointer is the only client-only piece. Keeping it in
+// localStorage lets a hard reload — not just client-side navigation — restore
+// the work in progress.
+const UPLOAD_DOC_KEY = "profileforge:lastUploadDocId";
 
 type UploadResult = {
   sourceDocumentId: string;
@@ -53,6 +59,26 @@ export function UploadView() {
   const [confirmDialog, setConfirmDialog] = useState(false);
   const [error, setError] = useState<DescribedError | null>(null);
 
+  // Restore a workspace left behind by a previous visit: the GET returns the
+  // stored extraction/parse state, or 404 if the document was deleted meanwhile.
+  useEffect(() => {
+    const id = localStorage.getItem(UPLOAD_DOC_KEY);
+    if (!id) return;
+    void (async () => {
+      const res = await fetch(`/api/cv/${id}`);
+      if (!res.ok) {
+        localStorage.removeItem(UPLOAD_DOC_KEY);
+        return;
+      }
+      const body = (await res.json()) as UploadResult & {
+        parseResult: ParseResult | null;
+      };
+      setUpload(body);
+      setLanguage(body.detectedLanguage === "fr" ? "fr" : "en");
+      if (body.parseResult) setParsed(body.parseResult);
+    })();
+  }, []);
+
   async function handleUpload() {
     if (!file) return;
     setError(null);
@@ -66,6 +92,7 @@ export function UploadView() {
       return;
     }
     const body = (await res.json()) as UploadResult;
+    localStorage.setItem(UPLOAD_DOC_KEY, body.sourceDocumentId);
     setUpload(body);
     setLanguage(body.detectedLanguage);
   }

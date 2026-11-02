@@ -266,3 +266,54 @@ describe("parse + import (offline, mocked LLM)", () => {
     expect(row?.userId).toBe(user.id);
   });
 });
+
+describe("upload workspace restore (GET /api/cv/[id])", () => {
+  it("returns extraction state before parse and the stored draft after", async () => {
+    const upload = await import("@/app/api/cv/upload/route");
+    const uploaded = await upload.POST(req(UP, { method: "POST", body: fileForm("cv-en.pdf", "application/pdf") }));
+    const doc = await uploaded.json();
+    const rArgs = { params: Promise.resolve({ id: doc.sourceDocumentId }) };
+    const url = `http://localhost:3000/api/cv/${doc.sourceDocumentId}`;
+
+    const { GET } = await import("@/app/api/cv/[id]/route");
+    const before = await GET(req(url, { method: "GET" }), rArgs);
+    expect(before.status).toBe(200);
+    const stateBefore = await before.json();
+    expect(stateBefore.parseStatus).toBe("unparsed");
+    expect(stateBefore.parseResult).toBeNull();
+    expect(stateBefore.detectedLanguage).toBe("en");
+    expect(stateBefore.charCount).toBeGreaterThan(0);
+    expect(stateBefore.pageCount).toBeGreaterThanOrEqual(1);
+
+    const { callLLM } = await import("@/lib/llm/router");
+    vi.mocked(callLLM).mockResolvedValue({
+      data: { basics: { name: "Jordan Smith" }, experience: [], education: [], skills: [], languages: [], projects: [], certifications: [] },
+      usage: { promptTokens: 1, completionTokens: 1, costUsd: 0.001 },
+      modelUsed: "test/model",
+    });
+    const parse = await import("@/app/api/cv/[id]/parse/route");
+    const parseRes = await parse.POST(req(`${url}/parse`, {
+      method: "POST", body: JSON.stringify({}), headers: { "Content-Type": "application/json" },
+    }), { params: Promise.resolve({ id: doc.sourceDocumentId }) });
+    expect(parseRes.status).toBe(200);
+
+    const after = await GET(req(url, { method: "GET" }), rArgs);
+    const stateAfter = await after.json();
+    expect(stateAfter.parseStatus).toBe("parsed");
+    expect(stateAfter.parseResult.draft.basics.name).toBe("Jordan Smith");
+    expect(Array.isArray(stateAfter.parseResult.flags)).toBe(true);
+  });
+
+  it("hides other users' documents (404) — the workspace restore is owner-scoped", async () => {
+    const upload = await import("@/app/api/cv/upload/route");
+    const uploaded = await upload.POST(req(UP, { method: "POST", body: fileForm("cv-en.pdf", "application/pdf") }));
+    const doc = await uploaded.json();
+
+    await signIn("other-cv-restore@example.com");
+    const { GET } = await import("@/app/api/cv/[id]/route");
+    const res = await GET(req(`http://localhost:3000/api/cv/${doc.sourceDocumentId}`, { method: "GET" }), {
+      params: Promise.resolve({ id: doc.sourceDocumentId }),
+    });
+    expect(res.status).toBe(404);
+  });
+});

@@ -73,13 +73,24 @@ export async function getOrCreateProfile(userId: string, language: LanguageCode 
   }
 }
 
+// Sections sort by `order` with `id` as the secondary key: entries created
+// without an explicit order all get the DB default 0, and a lone equal sort key
+// makes Postgres return an arbitrary row order — which leaked into profile
+// snapshots (SC-002 selection tie-breaks) and the editor display order.
+// Cuid ids are lexicographically time-ordered, so { order, id } is stable.
 const includeAll = {
-  experiences: { orderBy: { order: "asc" as const }, include: { bullets: { orderBy: { order: "asc" as const } } } },
-  educations: { orderBy: { order: "asc" as const } },
-  skills: { orderBy: { order: "asc" as const } },
-  languages: { orderBy: { order: "asc" as const } },
-  projects: { orderBy: { order: "asc" as const }, include: { bullets: { orderBy: { order: "asc" as const } } } },
-  certifications: { orderBy: { order: "asc" as const } },
+  experiences: {
+    orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
+    include: { bullets: { orderBy: [{ order: "asc" as const }, { id: "asc" as const }] } },
+  },
+  educations: { orderBy: [{ order: "asc" as const }, { id: "asc" as const }] },
+  skills: { orderBy: [{ order: "asc" as const }, { id: "asc" as const }] },
+  languages: { orderBy: [{ order: "asc" as const }, { id: "asc" as const }] },
+  projects: {
+    orderBy: [{ order: "asc" as const }, { id: "asc" as const }],
+    include: { bullets: { orderBy: [{ order: "asc" as const }, { id: "asc" as const }] } },
+  },
+  certifications: { orderBy: [{ order: "asc" as const }, { id: "asc" as const }] },
 };
 
 async function getProfileRaw(client: Client, id: string) {

@@ -277,7 +277,7 @@ model AppSettings {
   userId                 String?  @unique
   openRouterKeyEncrypted String?
   keyHint                String?
-  modelEconomy           String   @default("minimax/minimax-m3.1-flash:free")
+  modelEconomy           String   @default("nvidia/nemotron-3.5-super-vl:free")
   modelPremium           String   @default("anthropic/claude-sonnet-4.5")
   costCapUsd             Float    @default(0.5)
   updatedAt              DateTime @updatedAt

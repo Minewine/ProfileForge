@@ -7,7 +7,7 @@ export type AppSettingsRow = {
 };
 
 export const DEFAULT_SETTINGS: AppSettingsRow = {
-  modelEconomy: "minimax/minimax-m3.1-flash:free",
+  modelEconomy: "nvidia/nemotron-3.5-super-vl:free",
   modelPremium: "anthropic/claude-sonnet-4.5",
   costCapUsd: 0.5,
 };

@@ -26,6 +26,7 @@ export const ERROR_CODES = [
   "INVALID_STATE",
   // --- Slice 3: generation (contracts/api.md) ---
   "ANALYSIS_NOT_MATCHED",
+  "GENERATION_ALREADY_ACTIVE",
   "GENERATION_INVALID_STATE",
   "PAGE_BUDGET_CONFLICT",
   "EXPORT_GATE_FAILED",
@@ -63,6 +64,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   INVALID_STATE: 409,
   // --- Slice 3: generation (contracts/api.md) ---
   ANALYSIS_NOT_MATCHED: 409,
+  GENERATION_ALREADY_ACTIVE: 409,
   GENERATION_INVALID_STATE: 409,
   PAGE_BUDGET_CONFLICT: 409,
   EXPORT_GATE_FAILED: 409,

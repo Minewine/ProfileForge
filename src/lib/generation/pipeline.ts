@@ -297,12 +297,16 @@ export async function runGenerationJob(jobId: string, stages: Stage[] = buildSta
   if (!job || job.status !== "queued" || job.analysis.userId === null) return; // unknown, terminal, quarantined, or already running elsewhere
 
   registerActiveJob(jobId); // excluded from stale-running recovery while we own it
+  let ownsRun = false; // true only once OUR markRunning won the atomic (id, status) gate
+  let runId: string | undefined;
   try {
     const running = await markRunning(jobId, job.runId ?? undefined);
+    ownsRun = true;
+    runId = running.runId!;
     const ctx: StageContext = {
       jobId,
       analysisId: job.analysisId,
-      runId: running.runId!,
+      runId,
       kind: job.kind as GenerationKind,
       settings: GenerationSettingsSchema.parse(job.settings),
       profileVersion: job.profileVersion,
@@ -326,19 +330,21 @@ export async function runGenerationJob(jobId: string, stages: Stage[] = buildSta
         await stage.run(ctx);
       } catch (err) {
         if (err instanceof GenerationCancelled) throw err; // cancel wins over failure
-        await markFailed(jobId, describeStageError(stage.name, err));
+        await markFailed(jobId, describeStageError(stage.name, err), runId);
         return;
       }
     }
     await assertNotCancelled(jobId); // a cancel landing during the last stage still wins
     await markSucceeded(jobId);
   } catch (err) {
+    if (!ownsRun) return; // lost the atomic start race — the row belongs to the winning run, never touch it
     if (err instanceof GenerationCancelled) {
       await markCancelled(jobId).catch(() => {});
       return;
     }
-    // Transition-level failure (e.g. the row changed under us): record it if we still can.
-    await markFailed(jobId, describeStageError("pipeline", err)).catch(() => {});
+    // Failure outside a stage (e.g. malformed frozen settings): scoped to OUR
+    // runId so it can only fail a row we actually marked running.
+    await markFailed(jobId, describeStageError("pipeline", err), runId).catch(() => {});
   } finally {
     unregisterActiveJob(jobId);
   }
@@ -350,9 +356,7 @@ export async function runGenerationJob(jobId: string, stages: Stage[] = buildSta
 const globalForInFlight = globalThis as unknown as { generationInFlight?: Map<string, Promise<void>> };
 const inFlight: Map<string, Promise<void>> = (globalForInFlight.generationInFlight ??= new Map());
 
-/** Route entry point: start the run without awaiting it (R4). Never throws. */
-export function kickoffGenerationJob(jobId: string): void {
-  if (inFlight.has(jobId)) return;
+function startRun(jobId: string): Promise<void> {
   const run = runGenerationJob(jobId).catch((err) => {
     console.error(redact(`generation job ${jobId} crashed: ${String(err)}`));
   });
@@ -360,6 +364,27 @@ export function kickoffGenerationJob(jobId: string): void {
   void run.finally(() => {
     inFlight.delete(jobId);
   });
+  return run;
+}
+
+/** Route entry point: start the run without awaiting it (R4). Never throws. */
+export function kickoffGenerationJob(jobId: string): void {
+  const existing = inFlight.get(jobId);
+  if (existing) {
+    // Swallow-window fix (P1 review): the registered run may have already
+    // reached a terminal transition while its `finally` has not cleared the
+    // map yet — a retry issued in that window must START once it settles, not
+    // sit queued until the stale sweep marks it INTERRUPTED. Harmless when the
+    // run is genuinely still executing: runGenerationJob re-checks `queued`
+    // and no-ops.
+    void existing
+      .catch(() => {})
+      .then(() => {
+        if (!inFlight.has(jobId)) startRun(jobId);
+      });
+    return;
+  }
+  startRun(jobId);
 }
 
 /** Resolve when a kicked-off run for this job has settled (test/helper hook). */

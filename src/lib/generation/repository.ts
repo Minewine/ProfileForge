@@ -33,6 +33,22 @@ export async function createGenerationJob(userId: string, input: {
 
   const profile = await getOrCreateProfile(userId);
 
+  // Kickoff dedupe (P1 review): a double-submitted POST must not run two full
+  // pipelines (double LLM spend; the losing appendVersion then dies on the
+  // (documentId, version) unique). Single-process guarantee — cross-process
+  // serialization would need a partial unique index Prisma cannot express.
+  const active = await db.generationJob.findFirst({
+    where: { analysisId: input.analysisId, kind: input.kind, status: { in: ["queued", "running"] } },
+    select: { id: true },
+  });
+  if (active) {
+    throw new ApiError(
+      "GENERATION_ALREADY_ACTIVE",
+      "A generation for this document is already queued or running. Wait for it to finish or cancel it first.",
+      { generationJobId: active.id },
+    );
+  }
+
   return db.generationJob.create({
     data: {
       analysisId: input.analysisId,
@@ -46,71 +62,90 @@ export async function createGenerationJob(userId: string, input: {
 }
 
 // --- Lifecycle transitions (terminal states immutable; retry is the only way back) ---
+// Every transition is a CONDITIONAL update on (id, status): the status gate is
+// enforced atomically by the UPDATE itself, not by a prior read — two readers
+// can no longer both pass a read-check and clobber each other's write.
 
 function newRunId(jobId: string, attempt: number): string {
   return `gen-${jobId}-a${attempt}-${Date.now()}`;
 }
 
-async function loadForTransition(id: string, allowed: string[], action: string) {
-  const job = await db.generationJob.findUnique({ where: { id } });
-  if (!job) throw new ApiError("NOT_FOUND", "Generation job not found.");
-  if (!allowed.includes(job.status)) {
+async function conditionalTransition(
+  id: string,
+  from: string[],
+  data: Parameters<typeof db.generationJob.updateMany>[0]["data"],
+  action: string,
+  extraWhere: Record<string, unknown> = {},
+) {
+  const existing = await db.generationJob.findUnique({ where: { id }, select: { status: true } });
+  if (!existing) throw new ApiError("NOT_FOUND", "Generation job not found.");
+  const result = await db.generationJob.updateMany({
+    where: { id, status: { in: from }, ...extraWhere },
+    data,
+  });
+  if (result.count === 0) {
+    // The status may have changed since the read — the message is diagnostic;
+    // the atomic update was the gate.
     throw new ApiError(
       "GENERATION_INVALID_STATE",
-      `Cannot ${action} a generation job in status "${job.status}" (allowed: ${allowed.join(", ")}).`,
-      { status: job.status },
+      `Cannot ${action} a generation job in status "${existing.status}" (allowed: ${from.join(", ")}).`,
+      { status: existing.status },
     );
   }
-  return job;
+  return db.generationJob.findUniqueOrThrow({ where: { id } });
 }
 
 export async function markRunning(id: string, runId?: string) {
-  const job = await loadForTransition(id, ["queued"], "start");
+  const job = await db.generationJob.findUnique({ where: { id } });
+  if (!job) throw new ApiError("NOT_FOUND", "Generation job not found.");
   const effectiveRunId = runId ?? job.runId ?? newRunId(job.id, job.attempt);
-  return db.generationJob.update({
-    where: { id },
-    data: { status: "running", runId: effectiveRunId, startedAt: new Date() },
-  });
+  return conditionalTransition(
+    id,
+    ["queued"],
+    { status: "running", runId: effectiveRunId, startedAt: new Date() },
+    "start",
+  );
 }
 
 export async function markSucceeded(id: string) {
-  await loadForTransition(id, ["running"], "succeed");
-  return db.generationJob.update({
-    where: { id },
-    data: { status: "succeeded", finishedAt: new Date() },
-  });
+  return conditionalTransition(id, ["running"], { status: "succeeded", finishedAt: new Date() }, "succeed");
 }
 
-export async function markFailed(id: string, statusError: string) {
-  await loadForTransition(id, ["running"], "fail");
+/** `runId` scopes the failure to the run that owns the row: a losing runner
+ *  whose markRunning lost the atomic race must never fail the winner's run. */
+export async function markFailed(id: string, statusError: string, runId?: string) {
   // statusError flows from arbitrary failure text (LLM/provider messages can
   // carry a literal NUL byte, which Postgres rejects in text columns)
   const safe = statusError.replace(/\0/g, "");
-  return db.generationJob.update({
-    where: { id },
-    data: { status: "failed", statusError: safe, finishedAt: new Date() },
-  });
+  return conditionalTransition(
+    id,
+    ["running"],
+    { status: "failed", statusError: safe, finishedAt: new Date() },
+    "fail",
+    runId !== undefined ? { runId } : {},
+  );
 }
 
 export async function markCancelled(id: string) {
-  await loadForTransition(id, ["queued", "running"], "cancel");
-  return db.generationJob.update({
-    where: { id },
-    data: { status: "cancelled", finishedAt: new Date() },
-  });
+  return conditionalTransition(id, ["queued", "running"], { status: "cancelled", finishedAt: new Date() }, "cancel");
 }
 
 export async function setCancelRequested(id: string) {
-  await loadForTransition(id, ["queued", "running"], "request cancellation of");
-  return db.generationJob.update({ where: { id }, data: { cancelRequested: true } });
+  return conditionalTransition(
+    id,
+    ["queued", "running"],
+    { cancelRequested: true },
+    "request cancellation of",
+  );
 }
 
 /** Only `failed`/`cancelled` go back to `queued`, with `attempt + 1` and a fresh runId. */
 export async function retryJob(id: string) {
-  const job = await loadForTransition(id, ["failed", "cancelled"], "retry");
+  const job = await db.generationJob.findUnique({ where: { id } });
+  if (!job) throw new ApiError("NOT_FOUND", "Generation job not found.");
   const attempt = job.attempt + 1;
-  return db.generationJob.update({
-    where: { id },
+  const result = await db.generationJob.updateMany({
+    where: { id, status: { in: ["failed", "cancelled"] } },
     data: {
       status: "queued",
       attempt,
@@ -121,6 +156,14 @@ export async function retryJob(id: string) {
       finishedAt: null,
     },
   });
+  if (result.count === 0) {
+    throw new ApiError(
+      "GENERATION_INVALID_STATE",
+      `Cannot retry a generation job in status "${job.status}" (allowed: failed, cancelled).`,
+      { status: job.status },
+    );
+  }
+  return db.generationJob.findUniqueOrThrow({ where: { id } });
 }
 
 // --- Stale-running recovery (research R4) ---
@@ -129,7 +172,12 @@ export async function retryJob(id: string) {
  *  was left behind by a dead process and is recovered as INTERRUPTED. Kept on
  *  globalThis (same pattern as db.ts): Next.js instantiates each route bundle's
  *  copy of this module separately, so a plain module-scoped Set is empty in the
- *  polling routes' copies and sweeps live jobs as INTERRUPTED. */
+ *  polling routes' copies and sweeps live jobs as INTERRUPTED.
+ *
+ *  Single-process assumption (P1 review): the in-process set and the atomic
+ *  (id, status) transitions make one server instance correct; running multiple
+ *  instances against one DB would let instance B's sweep fail instance A's
+ *  live runs. Horizontal scaling is a documented non-goal (STATUS.md). */
 const globalForActiveJobs = globalThis as unknown as { generationActiveJobs?: Set<string> };
 const activeJobs: Set<string> = (globalForActiveJobs.generationActiveJobs ??= new Set());
 
@@ -153,7 +201,10 @@ export async function markStaleRunningAsInterrupted(): Promise<number> {
   const stranded = await db.generationJob.updateMany({
     where: {
       status: "queued",
-      OR: [{ cancelRequested: true }, { createdAt: { lt: new Date(Date.now() - 60_000) } }],
+      // Freshness is judged on `updatedAt`, not `createdAt`: retryJob returns a
+      // job to `queued` without touching createdAt, so a createdAt-based sweep
+      // killed fresh retries racing a poller (P1 review).
+      OR: [{ cancelRequested: true }, { updatedAt: { lt: new Date(Date.now() - 60_000) } }],
       ...(active.length > 0 ? { id: { notIn: active } } : {}),
     },
     data: {

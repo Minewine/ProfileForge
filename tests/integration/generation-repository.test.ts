@@ -123,6 +123,30 @@ describe("createGenerationJob guards", () => {
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
+  it("refuses a second concurrent generation for the same (analysis, kind) — kickoff dedupe (P1)", async () => {
+    const analysisId = await matchedAnalysisId();
+    const first = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
+    expect(first.status).toBe("queued");
+
+    // a double-submitted POST must not run two full pipelines (double LLM spend)
+    await expect(
+      createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() }),
+    ).rejects.toMatchObject({ code: "GENERATION_ALREADY_ACTIVE" });
+
+    // a different kind is a different deliverable — allowed
+    const letter = await createGenerationJob(user.id, {
+      analysisId,
+      kind: "cover_letter",
+      settings: resolveGenerationSettings({ kind: "cover_letter", analysisLanguage: "en" }),
+    });
+    expect(letter.kind).toBe("cover_letter");
+
+    // once the cv job leaves the active set, the slot frees up
+    await db.generationJob.update({ where: { id: first.id }, data: { status: "failed" } });
+    const again = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
+    expect(again.status).toBe("queued");
+  });
+
   it("creates a job despite overlapping experience dates (no blocking guard)", async () => {
     const analysisId = await matchedAnalysisId();
     const profile = await getOrCreateProfile(user.id);
@@ -262,7 +286,12 @@ describe("job lifecycle", () => {
   it("recovers stale running rows as failed INTERRUPTED on list/read", async () => {
     const analysisId = await matchedAnalysisId();
     const stale = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
-    const fresh = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
+    // different kind: an active same-kind job is refused by the kickoff dedupe (P1)
+    const fresh = await createGenerationJob(user.id, {
+      analysisId,
+      kind: "cover_letter",
+      settings: resolveGenerationSettings({ kind: "cover_letter", analysisLanguage: "en" }),
+    });
     // simulate rows left running by a dead process (never registered active)
     await db.generationJob.updateMany({ where: { id: { in: [stale.id, fresh.id] } }, data: { status: "running" } });
 
@@ -293,6 +322,54 @@ describe("job lifecycle", () => {
     } finally {
       fresh.unregisterActiveJob(job.id);
     }
+  });
+
+  it("transitions are atomic — a losing runner can neither start nor fail a row it does not own (P1)", async () => {
+    const analysisId = await matchedAnalysisId();
+    const job = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
+
+    const running = await markRunning(job.id, "run-A");
+    expect(running.status).toBe("running");
+
+    // a second runner loses the atomic (id, status) gate...
+    await expect(markRunning(job.id, "run-B")).rejects.toMatchObject({ code: "GENERATION_INVALID_STATE" });
+    // ...and scoped to its own runId, it cannot fail the winner's run either
+    await expect(markFailed(job.id, "ROGUE: not mine", "run-B")).rejects.toMatchObject({
+      code: "GENERATION_INVALID_STATE",
+    });
+    expect((await db.generationJob.findUnique({ where: { id: job.id } }))?.status).toBe("running");
+
+    // the owner fails its own run by runId
+    const failed = await markFailed(job.id, "OURS: real failure", "run-A");
+    expect(failed.status).toBe("failed");
+    expect(failed.statusError).toBe("OURS: real failure");
+  });
+
+  it("a freshly retried job is not swept as stranded — sweep freshness is updatedAt (P1)", async () => {
+    const analysisId = await matchedAnalysisId();
+    const job = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
+    await markRunning(job.id, "run-1");
+    await markFailed(job.id, "boom");
+    // age only createdAt — the criterion the old sweep used; retryJob has just
+    // bumped updatedAt
+    await db.generationJob.update({
+      where: { id: job.id },
+      data: { createdAt: new Date(Date.now() - 120_000) },
+    });
+    await retryJob(job.id);
+
+    await getJob(user.id, job.id); // any read runs the stale sweep
+    expect((await db.generationJob.findUnique({ where: { id: job.id } }))?.status).toBe("queued");
+
+    // a genuinely stranded queued job (untouched for >60s) still recovers
+    await db.generationJob.update({
+      where: { id: job.id },
+      data: { updatedAt: new Date(Date.now() - 120_000) },
+    });
+    await getJob(user.id, job.id);
+    const swept = await db.generationJob.findUnique({ where: { id: job.id } });
+    expect(swept?.status).toBe("failed");
+    expect(swept?.statusError).toBe("INTERRUPTED");
   });
 });
 
@@ -325,6 +402,10 @@ describe("documents & versions", () => {
     });
     expect(v1.version).toBe(1);
     expect(v1.revision).toBe(0);
+
+    // free the (analysis, kind) slot — the kickoff dedupe refuses a second
+    // active cv job, and this test exercises version chaining, not concurrency
+    await db.generationJob.update({ where: { id: job1.id }, data: { status: "succeeded" } });
 
     const job2 = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
     const v2 = await appendVersion({
@@ -419,6 +500,7 @@ describe("documents & versions", () => {
     expect(open.downloadable).toEqual({ pdf: true, docx: false, txt: false });
 
     // a failed extraction check keeps the pdf closed even with artifacts
+    await db.generationJob.update({ where: { id: job.id }, data: { status: "succeeded" } }); // free the dedupe slot
     const job2 = await createGenerationJob(user.id, { analysisId, kind: "cv", settings: cvSettings() });
     await appendVersion({
       documentId: document.id,

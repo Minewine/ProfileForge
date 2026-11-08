@@ -22,7 +22,7 @@ const LLM_CODES = [
  *  (src/lib/generation/draft.ts) since the Fact Guard removal — warnings only.
  *  Profile-claims codes (INCONSISTENT_STATE, MISSING_LOCATOR,
  *  CONTAINMENT_UNRESOLVED) are not generation flags — deliberately absent. */
-const FLAG_CODES = ["VERBATIM_FALLBACK", "UNCERTAIN_TRANSLATION"] as const;
+const FLAG_CODES = ["VERBATIM_FALLBACK", "UNCERTAIN_TRANSLATION", "GROUNDING_FAILED"] as const;
 
 describe("LLM_ERROR_GUIDANCE", () => {
   it("covers exactly the LLM error codes with short non-empty actions", () => {

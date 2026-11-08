@@ -464,3 +464,68 @@ describe("summary synthesis payload (feature 005 US3)", () => {
     expect(GenerateTailoredCVInputSchema.parse(payload)).toBeDefined();
   });
 });
+
+describe("grounding warnings (Fact Guard successor, warnings-only)", () => {
+  const groundedPlan = planFixture([
+    item({
+      key: "exp.e1.1",
+      kind: "experience",
+      entryId: "e1",
+      sourceText: ["Built the ingestion platform serving 200M events per day at Acme"],
+    }),
+  ]);
+
+  it("flags an invented number in a rewritten bullet as GROUNDING_FAILED, provenance intact", () => {
+    const { content, warnings } = mergeKeyedDraft(groundedPlan, {
+      summary: "",
+      items: [{ key: "exp.e1.1", text: "Built the ingestion platform serving 300M events per day at Acme" }],
+    });
+    const flag = warnings.find((w) => w.code === "GROUNDING_FAILED");
+    expect(flag).toMatchObject({ claim: "exp.e1.1", severity: "warning", resolution: "pending" });
+    expect(flag?.detail).toContain("300M");
+    expect(content.experience[0].bullets[0].sourceBulletIds).toEqual(groundedPlan.items[0].sourceIds);
+  });
+
+  it("accepts a grounded rewording without warnings", () => {
+    const { warnings } = mergeKeyedDraft(groundedPlan, {
+      summary: "",
+      items: [{ key: "exp.e1.1", text: "Spearheaded the ingestion platform handling 200M events/day at Acme" }],
+    });
+    expect(warnings.filter((w) => w.code === "GROUNDING_FAILED")).toEqual([]);
+  });
+
+  it("never flags verbatim-fallback items (grounded by construction)", () => {
+    const { warnings } = mergeKeyedDraft(groundedPlan, { summary: "", items: [] });
+    expect(warnings.filter((w) => w.code === "GROUNDING_FAILED")).toEqual([]);
+    // pre-existing behavior: the skipped item and the empty summary both fall
+    // back to source text with VERBATIM_FALLBACK
+    expect(warnings).toContainEqual({
+      code: "VERBATIM_FALLBACK",
+      claim: "exp.e1.1",
+      severity: "warning",
+      resolution: "pending",
+    });
+  });
+
+  it("accepts a summary built from its sanctioned inputs (sources + requirements + digest)", () => {
+    const plan = planFixture([], {
+      summarySources: ["Led 5 engineers"],
+      summaryRequirements: ["Kubernetes at scale"],
+      jdDigest: { role: "Staff Engineer", keywords: ["platform"] },
+    });
+    const { warnings } = mergeKeyedDraft(plan, {
+      summary: "Staff Engineer who led 5 engineers on Kubernetes at scale.",
+      items: [],
+    });
+    expect(warnings.filter((w) => w.code === "GROUNDING_FAILED")).toEqual([]);
+  });
+
+  it("flags an invented number in the summary", () => {
+    const plan = planFixture([], { summarySources: ["Led 5 engineers"] });
+    const { warnings } = mergeKeyedDraft(plan, {
+      summary: "Led 5 engineers and saved 2M euros.",
+      items: [],
+    });
+    expect(warnings.some((w) => w.code === "GROUNDING_FAILED" && w.claim === "summary")).toBe(true);
+  });
+});

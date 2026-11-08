@@ -187,13 +187,15 @@ export type SelectionRecord = z.infer<typeof SelectionRecordSchema>;
 
 // --- Validation report ---
 // Warnings-only since the Fact Guard removal: the draft stage records
-// VERBATIM_FALLBACK / UNCERTAIN_TRANSLATION flags; nothing gates downloads on
-// this report any more (computeDownloadable checks artifacts + extraction).
+// VERBATIM_FALLBACK / UNCERTAIN_TRANSLATION / GROUNDING_FAILED flags; nothing
+// gates downloads on this report any more (computeDownloadable checks
+// artifacts + extraction).
 
 export const ValidationFlagSchema = z.object({
   code: z.string().min(1),
   claim: z.string().min(1), // claimId addressed
   severity: z.enum(["blocker", "warning"]),
+  detail: z.string().optional(), // e.g. GROUNDING_FAILED: the offending tokens
   affectedFieldIds: z.array(z.string()).optional(),
   sourceEvidence: z.array(EvidenceRefSchema).optional(),
   resolution: z.enum(["pending", "user_confirmed", "edited", "removed"]),

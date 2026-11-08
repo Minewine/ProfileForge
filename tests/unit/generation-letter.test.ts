@@ -238,3 +238,28 @@ describe("renderLetter + plain text", () => {
     expect(rendered.bytes.byteLength).toBeGreaterThan(0);
   });
 });
+
+describe("letter grounding warnings (warnings-only)", () => {
+  it("flags an invented number in a rewritten paragraph", () => {
+    const plan = buildLetterPlan({ snapshot: snapshotFixture(), report: reportFixture() });
+    const invented = "At Globex I operated Kubernetes clusters serving 9B requests per day.";
+    const { warnings } = mergeKeyedLetterDraft(plan, {
+      paragraphs: plan.items.map((i) => ({ key: i.key, text: invented })),
+    });
+    expect(warnings.filter((w) => w.code === "GROUNDING_FAILED").length).toBeGreaterThan(0);
+  });
+
+  it("accepts a paragraph grounded in the angle's evidence texts and entry meta", () => {
+    const plan = buildLetterPlan({ snapshot: snapshotFixture(), report: reportFixture() });
+    const { warnings } = mergeKeyedLetterDraft(plan, {
+      paragraphs: plan.items.map((i, n) => ({
+        key: i.key,
+        text:
+          n === 0
+            ? "As Platform Engineer at Acme, I operated Kubernetes clusters serving 2M requests per day."
+            : "I would bring the same rigor to this role.",
+      })),
+    });
+    expect(warnings.filter((w) => w.code === "GROUNDING_FAILED")).toEqual([]);
+  });
+});

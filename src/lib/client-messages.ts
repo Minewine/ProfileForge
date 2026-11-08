@@ -32,6 +32,8 @@ export const FLAG_EXPLANATIONS: Record<string, string> = {
   VERBATIM_FALLBACK:
     "The AI didn't rewrite this item, so the original source wording is used (it may not match the output language) — edit it or regenerate.",
   UNCERTAIN_TRANSLATION: "The AI wasn't sure about this translation — double-check the wording.",
+  GROUNDING_FAILED:
+    "The AI's rewrite may have added a detail that isn't in the source evidence — double-check it or regenerate.",
 };
 
 const guidanceFor = (code: string): string | null =>

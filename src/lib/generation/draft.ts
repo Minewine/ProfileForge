@@ -1,4 +1,5 @@
 import { callLLM } from "@/lib/llm/router";
+import { checkGrounding } from "@/lib/generation/grounding";
 import "@/lib/llm/tasks/generatetailoredcv"; // self-registering premium task (registry pattern)
 import "@/lib/llm/tasks/generatecoverletter"; // self-registering premium task (US6)
 import {
@@ -41,6 +42,22 @@ function uncertainTranslationFlag(claim: string): ValidationFlag {
   return { code: "UNCERTAIN_TRANSLATION", claim, severity: "warning", resolution: "pending" };
 }
 
+/** Warnings-only grounding check (Fact Guard successor): numbers and acronyms
+ *  in the rewrite must exist in the claim's sanctioned sources — the exact
+ *  claim-relevant texts the prompt received. Violations surface as
+ *  GROUNDING_FAILED draft warnings; nothing is gated on them. */
+function groundingFlags(claim: string, text: string, sanctioned: string[]): ValidationFlag[] {
+  const violations = checkGrounding(text, sanctioned);
+  if (violations.length === 0) return [];
+  return [{
+    code: "GROUNDING_FAILED",
+    claim,
+    severity: "warning",
+    detail: violations.map((v) => v.token).join(", "),
+    resolution: "pending",
+  }];
+}
+
 /** Pure keyed merge — deterministic, testable without the LLM. */
 export function mergeKeyedDraft(
   plan: CVPlan,
@@ -62,6 +79,12 @@ export function mergeKeyedDraft(
     const drafted = byKey.get(item.key);
     if (!drafted) warnings.push(verbatimFallbackFlag(item.key));
     const text = drafted?.text ?? verbatimFallbackText(item.sourceText);
+    if (drafted) {
+      // verbatim fallbacks are grounded by construction — only check rewrites
+      warnings.push(
+        ...groundingFlags(item.key, text, [...item.sourceText, ...Object.values(item.entryMeta)]),
+      );
+    }
 
     if (item.kind === "title") {
       // feature 005 US2: the role title is a keyed rewrite claim
@@ -106,6 +129,19 @@ export function mergeKeyedDraft(
   const summary = output.summary.trim();
   const fallbackSummary = plan.summarySources[0] ?? "";
   if (!summary && fallbackSummary) warnings.push(verbatimFallbackFlag("summary"));
+  if (summary) {
+    // the summary is synthesized from these sanctioned inputs by design (README:
+    // must-have requirements + strongest evidence) — nothing else is a fact source
+    warnings.push(
+      ...groundingFlags("summary", summary, [
+        ...plan.summarySources,
+        ...plan.summaryRequirements,
+        ...plan.jdDigest.keywords,
+        plan.jdDigest.role ?? "",
+        plan.jdDigest.company ?? "",
+      ]),
+    );
+  }
 
   const content = GeneratedCVContentSchema.parse({
     claimIdVersion: 1,
@@ -204,6 +240,15 @@ export function mergeKeyedLetterDraft(
       omissions.push({ type: "letter_paragraph", id: item.key, reason: "unwritten" });
       continue;
     }
+    warnings.push(
+      ...groundingFlags(item.key, drafted.text, [
+        ...item.sourceText,
+        plan.jdDigest.role ?? "",
+        plan.jdDigest.company ?? "",
+        ...plan.jdDigest.keywords,
+        ...plan.jdDigest.topRequirements,
+      ]),
+    );
     paragraphs.push({ claimId: item.key, text: drafted.text, evidence: item.evidence });
   }
 

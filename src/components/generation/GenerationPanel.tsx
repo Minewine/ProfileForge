@@ -95,6 +95,10 @@ type ValidationReportView = {
 type PollPayload = { job: JobView; document: DocumentView | null };
 
 const POLL_MS = 1500;
+/** Transient poll failures tolerated before the panel declares the connection
+ *  lost and stops polling (P1 review: one failed fetch used to freeze the UI
+ *  in its last known "running" state forever). */
+const MAX_POLL_FAILURES = 5;
 const ACTIVE_STATUSES = ["queued", "running"];
 const MAX_NOTES = 2000;
 /** US3 (contracts/ui-states.md): disabled controls state WHY — generation in progress. */
@@ -187,12 +191,30 @@ export function GenerationPanel({
   const [error, setError] = useState<DescribedError | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [poll, setPoll] = useState<PollPayload | null>(null);
+  const [pollFailures, setPollFailures] = useState(0);
+  const [pollGone, setPollGone] = useState(false); // 404 — the job row was deleted
   const [openClaim, setOpenClaim] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  /** Derived (never set in an effect): polling gives up after MAX_POLL_FAILURES
+   *  transient failures or an explicit 404 (P1 review). */
+  const pollLost = pollGone || pollFailures >= MAX_POLL_FAILURES;
 
   const refresh = useCallback(async (id: string) => {
-    const res = await fetch(`/api/generations/${id}`);
-    if (res.ok) setPoll(await res.json());
+    try {
+      const res = await fetch(`/api/generations/${id}`);
+      if (res.status === 404) {
+        // the job row is gone (deleted in another tab) — terminal, stop polling
+        setPollGone(true);
+        return;
+      }
+      if (!res.ok) throw new Error(`poll failed (${res.status})`);
+      setPollFailures(0);
+      setPoll(await res.json());
+    } catch {
+      // transient failure — count it and let the poll effect retry with
+      // backoff; a single failed fetch must never end the polling chain
+      setPollFailures((n) => n + 1);
+    }
   }, []);
 
   // Resume the most recent generation for this analysis on mount, whichever
@@ -226,14 +248,18 @@ export function GenerationPanel({
     };
   }, [analysisId, refresh]);
 
-  // Poll while the job is active; stops once a terminal status lands.
+  // Poll while the job is active; stops once a terminal status lands. Failed
+  // polls retry with capped backoff instead of silently ending the chain, and
+  // give up into an explicit "status unavailable" state after MAX_POLL_FAILURES.
   useEffect(() => {
-    if (!jobId) return;
+    if (!jobId || pollLost) return;
     const status = poll?.job.status;
-    if (!status || !ACTIVE_STATUSES.includes(status)) return;
-    const timer = setTimeout(() => void refresh(jobId), POLL_MS);
+    const active = status !== undefined && ACTIVE_STATUSES.includes(status);
+    if (!active && pollFailures === 0) return; // terminal and healthy — done
+    const delay = Math.min(POLL_MS * 2 ** pollFailures, 10_000);
+    const timer = setTimeout(() => void refresh(jobId), delay);
     return () => clearTimeout(timer);
-  }, [jobId, poll, refresh]);
+  }, [jobId, poll, pollFailures, pollLost, refresh]);
 
   async function generate(selectedKind: "cv" | "cover_letter" = kind) {
     setBusy(true);
@@ -267,6 +293,8 @@ export function GenerationPanel({
       setKind(selectedKind);
       setLatestByKind((prev) => ({ ...prev, [selectedKind]: created.generationJobId }));
       setOpenClaim(null);
+      setPollFailures(0);
+      setPollGone(false);
       await refresh(created.generationJobId);
     } finally {
       setBusy(false);
@@ -281,6 +309,8 @@ export function GenerationPanel({
     setJobId(id);
     setPoll(null);
     setOpenClaim(null);
+    setPollFailures(0);
+    setPollGone(false);
     await refresh(id);
   }
 
@@ -342,6 +372,11 @@ export function GenerationPanel({
         </span>
       </CardHeader>
       <CardContent className="space-y-4">
+        {pollLost && (
+          <p className="rounded-md bg-amber-50 p-2 text-sm text-amber-800" data-testid="gen-poll-lost">
+            Generation status is unavailable right now — reload the page to check the current state.
+          </p>
+        )}
         {(["cv", "cover_letter"] as const).some((k) => latestByKind[k] && k !== kind) && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs uppercase tracking-wide text-neutral-400">View latest</span>

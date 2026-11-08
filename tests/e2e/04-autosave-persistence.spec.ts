@@ -41,18 +41,20 @@ test.describe("US4 — autosave persists across reload", () => {
     );
   });
 
-  test("an edit abandoned before the debounce fires does not persist", async ({ page, request }) => {
+  test("an edit abandoned before the debounce fires is flushed on unload", async ({ page, request }) => {
     await openProfile(page);
     const body = await apiGet<{ profile: { experience: ExperienceDto[] } }>(request, "/api/profile");
     const acme = body.profile.experience.find((e) => e.company === "Acme Analytics")!;
     const locationField = entryById(page, "experience", acme.id).getByRole("textbox", { name: "Location" });
 
-    const priorValue = await locationField.inputValue();
-    await locationField.fill("Montreal (abandoned draft)");
-    // Reload BEFORE the 800 ms debounce can fire — no PATCH may have been sent.
+    // P1 fix: the old contract silently lost the last ≤800 ms of edits on
+    // reload/close ("abandoned draft does not persist"). The editor now flushes
+    // pending debounced saves on hide/unmount with keepalive, so the draft
+    // persists — a reload BEFORE the debounce can fire must not lose it.
+    await locationField.fill("Montreal (flushed on unload)");
     await page.reload();
     await expect(entryById(page, "experience", acme.id).getByRole("textbox", { name: "Location" })).toHaveValue(
-      priorValue,
+      "Montreal (flushed on unload)",
     );
   });
 

@@ -133,7 +133,9 @@ export function ProfileEditorView() {
   // The entry "+ Add" just created — its first field takes focus after the
   // post-add refetch (contract-editor-ui).
   const [justAdded, setJustAdded] = useState<string | null>(null);
-  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  // Pending debounced autosaves: key → timer + the closure to run. Keeping the
+  // closure lets an unload/hide flush fire saves that are still waiting (P1).
+  const timers = useRef(new Map<string, { timer: ReturnType<typeof setTimeout>; fn: () => unknown }>());
   // Latest server state, for building error labels at save time (closures in
   // `schedule` would otherwise capture a stale render).
   const profileRef = useRef<ProfileDto | null>(null);
@@ -141,6 +143,14 @@ export function ProfileEditorView() {
   // edits to different fields cannot overwrite each other (research D8).
   const pendingBasics = useRef<Record<string, unknown>>({});
   const lastBasicsSent = useRef<Record<string, unknown>>({});
+  // Serialized basics flushes (P1 review): two overlapping full-object PATCHes
+  // would land out of order and revert each other's fields — the server
+  // replaces the whole basics object on each PATCH.
+  const basicsQueue = useRef<Promise<boolean>>(Promise.resolve(true));
+  // Bumped after a version restore so the (uncontrolled) basics inputs remount
+  // and display the restored values. Plain version keying would remount on
+  // every autosave; only restores change what the fields should show.
+  const [basicsReset, setBasicsReset] = useState(0);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/profile");
@@ -164,13 +174,14 @@ export function ProfileEditorView() {
 
   function schedule(key: string, fn: () => unknown) {
     const existing = timers.current.get(key);
-    if (existing) clearTimeout(existing);
-    timers.current.set(
-      key,
-      setTimeout(() => {
+    if (existing) clearTimeout(existing.timer);
+    timers.current.set(key, {
+      timer: setTimeout(() => {
+        timers.current.delete(key); // a fired timer is no longer pending — the hide-flush must not re-fire it
         void fn();
       }, AUTOSAVE_DELAY_MS),
-    );
+      fn,
+    });
   }
 
   function beginSave() {
@@ -189,13 +200,37 @@ export function ProfileEditorView() {
    *  stale save firing after DELETE cannot 404 into a spurious error banner. */
   function cancelEntryTimers(section: string, id: string) {
     const prefix = `${section}-${id}-`;
-    for (const [key, timer] of [...timers.current]) {
+    for (const [key, entry] of [...timers.current]) {
       if (key.startsWith(prefix)) {
-        clearTimeout(timer);
+        clearTimeout(entry.timer);
         timers.current.delete(key);
       }
     }
   }
+
+  /** Fire every pending debounced save immediately — on tab hide/unmount, where
+   *  the pending timer would otherwise die with the page and silently lose the
+   *  last ≤800ms of edits (P1 review). The PATCHes use keepalive so they can
+   *  complete after the unload itself. */
+  function flushAllPendingNow() {
+    for (const [, entry] of [...timers.current]) {
+      clearTimeout(entry.timer);
+      entry.fn();
+    }
+    timers.current.clear();
+  }
+
+  useEffect(() => {
+    function onHide() {
+      if (document.visibilityState !== "hidden") return;
+      flushAllPendingNow();
+    }
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      flushAllPendingNow(); // SPA unmount: don't drop pending edits either
+    };
+  }, []);
 
   function entryLabel(section: string, id: string): string {
     const list = (profileRef.current as unknown as Record<string, Entry[]> | null)?.[section];
@@ -214,16 +249,22 @@ export function ProfileEditorView() {
       Object.entries(pendingBasics.current).map(([k, v]) => [k, k !== "name" && v === "" ? null : v]),
     );
     pendingBasics.current = {};
-    void patchProfile({
-      basics: {
-        ...lastBasicsSent.current,
-        name: (lastBasicsSent.current.name as string) ?? "Your name",
-        ...pending,
-      },
-    }).then((ok) => {
-      // A failed flush keeps its edits pending so the next keystroke retries them.
-      if (!ok) pendingBasics.current = { ...pending, ...pendingBasics.current };
-    });
+    // Chain onto the previous flush (P1 review): the body is built at execution
+    // time, AFTER the earlier flush's refetch has refreshed lastBasicsSent, so
+    // a queued flush never carries a stale base for the other fields.
+    basicsQueue.current = basicsQueue.current.then(() =>
+      patchProfile({
+        basics: {
+          ...lastBasicsSent.current,
+          name: (lastBasicsSent.current.name as string) ?? "Your name",
+          ...pending,
+        },
+      }).then((ok) => {
+        // A failed flush keeps its edits pending so the next keystroke retries them.
+        if (!ok) pendingBasics.current = { ...pending, ...pendingBasics.current };
+        return ok;
+      }),
+    );
   }
 
   async function patchProfile(patch: Record<string, unknown>): Promise<boolean> {
@@ -233,6 +274,7 @@ export function ProfileEditorView() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
+        keepalive: true, // unload/hide flushes must survive the page going away
       });
       if (res.ok) {
         const body = (await res.json()) as { version: number };
@@ -257,6 +299,7 @@ export function ProfileEditorView() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
+        keepalive: true, // unload/hide flushes must survive the page going away
       });
       if (res.status === 409) {
         // Renaming a skill onto an existing name (contract-editor-ui).
@@ -341,6 +384,13 @@ export function ProfileEditorView() {
   }
 
   async function restore(version: number) {
+    // P1 review: restore re-creates entries with NEW ids and replaces basics.
+    // A pending autosave firing after the restore would PATCH stale pre-restore
+    // values back over it (basics) or 404 on the deleted entry ids (spurious
+    // error banner) — cancel every pending timer and drop pending basics first.
+    for (const [, entry] of [...timers.current]) clearTimeout(entry.timer);
+    timers.current.clear();
+    pendingBasics.current = {};
     beginSave();
     try {
       const res = await fetch(`/api/profile/versions/${version}/restore`, { method: "POST" });
@@ -348,6 +398,7 @@ export function ProfileEditorView() {
         setStatus(`Restored v${version}`);
         await load();
         await loadVersions();
+        setBasicsReset((n) => n + 1); // remount basics inputs → show restored values
         return;
       }
       setError(describeSaveError(`Version v${version}`, await res.json().catch(() => null)));
@@ -398,7 +449,7 @@ export function ProfileEditorView() {
         <CardHeader>
           <CardTitle>Basics & language</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-3">
+        <CardContent key={basicsReset} className="grid grid-cols-2 gap-3">
           {(["name", "headline", "email", "phone", "location", "summary"] as const).map((f) => (
             <div key={f} className={f === "summary" ? "col-span-2 space-y-1" : "space-y-1"}>
               <Label htmlFor={`basics-${f}`}>{f}</Label>

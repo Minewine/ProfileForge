@@ -99,6 +99,22 @@ describe("CV upload guards (FR-001/FR-023)", () => {
     expect(res2.status).toBe(413);
     expect((await res2.json()).error.code).toBe("FILE_TOO_LARGE");
   });
+
+  it("rejects an oversized Content-Length before buffering the body (P1 memory DoS)", async () => {
+    const { POST } = await import("@/app/api/cv/upload/route");
+    const res = await POST(
+      req(UP, {
+        method: "POST",
+        headers: {
+          "Content-Type": "multipart/form-data; boundary=x",
+          "Content-Length": String(12 * 1024 * 1024), // over the 10 MB limit + multipart margin
+        },
+        body: "never read", // the route must refuse before formData() drains this
+      }),
+    );
+    expect(res.status).toBe(413);
+    expect((await res.json()).error.code).toBe("FILE_TOO_LARGE");
+  });
 });
 
 describe("partial-parse confirmation gate (Very long CV decision)", () => {

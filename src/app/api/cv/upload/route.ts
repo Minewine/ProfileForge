@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { ApiError, errorResponse } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth/guard";
-import { saveUpload } from "@/lib/files/storage";
+import { saveUpload, MAX_UPLOAD_BYTES } from "@/lib/files/storage";
 import { extractPdfPages } from "@/lib/parsing/pdf";
 import { extractDocxParagraphs } from "@/lib/parsing/docx";
 import { detectLanguage } from "@/lib/parsing/language";
@@ -14,6 +14,19 @@ const MIN_TEXT_CHARS = 50; // below this a "text-based" PDF is treated as scanne
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
+    // P1 review: formData() buffers the ENTIRE body in memory before
+    // saveUpload's size guard can run, and route handlers have no built-in
+    // body cap (verified against the bundled Next 16 docs — bodySizeLimit
+    // applies to Server Actions only). Reject oversized bodies up front; the
+    // margin absorbs multipart overhead. The header is advisory for chunked
+    // uploads — a proxy-level body limit is the stronger guarantee.
+    const declared = Number(req.headers.get("content-length") ?? "0");
+    if (Number.isFinite(declared) && declared > MAX_UPLOAD_BYTES + 64 * 1024) {
+      throw new ApiError(
+        "FILE_TOO_LARGE",
+        `Upload exceeds the 10 MB limit (Content-Length ${(declared / 1024 / 1024).toFixed(1)} MB).`,
+      );
+    }
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {

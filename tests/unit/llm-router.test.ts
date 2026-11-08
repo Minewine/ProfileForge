@@ -178,4 +178,49 @@ describe("llm router", () => {
     );
     await expect(checkRunCap("run-acc", accUser.id)).rejects.toMatchObject({ code: "COST_CAP_REACHED" });
   });
+
+  it("records usage for every attempt, including failed repair attempts (P1 cap ledger)", async () => {
+    registerTask(testTask);
+    const spendUser = await createTestUser("repair-usage@example.com");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        okResponse({ choices: [{ message: { content: JSON.stringify({ wrong: 1 }) } }], usage: OK_USAGE }),
+      )
+      .mockResolvedValueOnce(
+        okResponse({ choices: [{ message: { content: JSON.stringify({ wrong: 2 }) } }], usage: OK_USAGE }),
+      )
+      .mockResolvedValueOnce(
+        okResponse({ choices: [{ message: { content: JSON.stringify({ answer: "yes" }) } }], usage: OK_USAGE }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await callLLM({ userId: spendUser.id, task: "testTask", payload: {}, runId: "run-repair" });
+    expect(result.data).toEqual({ answer: "yes" });
+    // three real provider responses = three rows in the ledger; the success-path
+    // recording alone dropped the two failed repair attempts from the cap
+    const rows = await db.llmUsageLog.findMany({ where: { runId: "run-repair" } });
+    expect(rows).toHaveLength(3);
+  });
+
+  it("warns loudly when the provider omits the cost field but still records the spend (P1)", async () => {
+    registerTask(testTask);
+    const nocostUser = await createTestUser("nocost-usage@example.com");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({
+        choices: [{ message: { content: JSON.stringify({ answer: "yes" }) } }],
+        usage: { prompt_tokens: 7, completion_tokens: 3 }, // no cost field
+        model: "test/model",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await callLLM({ userId: nocostUser.id, task: "testTask", payload: {}, runId: "run-nocost" });
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("no cost field"));
+    const rows = await db.llmUsageLog.findMany({ where: { runId: "run-nocost" } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.costUsd).toBe(0); // recorded at 0 — with the warning making the gap visible
+    warnSpy.mockRestore();
+  });
 });

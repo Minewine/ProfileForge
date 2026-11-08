@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, redact } from "@/lib/api/errors";
 import { getSettings } from "@/lib/settings/store";
 
 export type UsageRecord = {
@@ -17,6 +17,12 @@ export type UsageRecord = {
  * Accumulation is derived from the LlmUsageLog rows written by recordUsage, so it
  * survives a server restart (a module-level Map used to reset it mid-run) and would
  * hold across multiple app instances.
+ *
+ * Accepted imprecision (P1 review): the check is read-then-log, so parallel
+ * calls within one run can each pass the check before any of them records —
+ * the cap can overshoot by up to (n−1) in-flight call costs. Reserving budget
+ * atomically per call was rejected as overkill for a local single-process app;
+ * per-attempt recording below keeps the ledger otherwise faithful.
  */
 export async function checkRunCap(runId: string, userId: string) {
   const settings = await getSettings(userId);
@@ -49,7 +55,10 @@ export async function recordUsage(u: UsageRecord, userId: string) {
         durationMs: u.durationMs,
       },
     });
-  } catch {
-    // Usage logging must never break an AI call.
+  } catch (err) {
+    // Usage logging must never break an AI call — but never silently: the cap
+    // derives from these rows, so a persistently failing insert would disable
+    // the hard stop for the run (P1 review).
+    console.warn(redact(`usage log insert failed — cost cap may under-count: ${String(err)}`));
   }
 }

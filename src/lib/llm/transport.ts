@@ -95,6 +95,27 @@ export const liveTransport: LlmTransport = {
         completionTokens: usage.completion_tokens ?? 0,
         costUsd: usage.cost ?? 0,
       };
+      // FR-008 (P1 review): every provider response that carried usage is real
+      // spend — record it immediately, including failed repair attempts, or
+      // the per-run cap never sees that cost. The success-path recording below
+      // would previously drop (n−1) repair attempts from the ledger.
+      if (usage.prompt_tokens !== undefined || usage.completion_tokens !== undefined || usage.cost !== undefined) {
+        if (usage.cost === undefined) {
+          console.warn(
+            redact(`openrouter ${model} returned no cost field (task ${task.name}) — cap accounting under-counts`),
+          );
+        }
+        await recordUsage(
+          {
+            task: task.name,
+            model: response.model ?? model,
+            runId,
+            ...lastUsage,
+            durationMs: Date.now() - startedAt,
+          },
+          req.userId,
+        );
+      }
 
       const parsedJson = parseJsonContent(rawContent);
       if (parsedJson === null) {
@@ -111,16 +132,7 @@ export const liveTransport: LlmTransport = {
 
       const validated = task.outputSchema.safeParse(parsedJson);
       if (validated.success) {
-        await recordUsage(
-          {
-            task: task.name,
-            model: response.model ?? model,
-            runId,
-            ...lastUsage,
-            durationMs: Date.now() - startedAt,
-          },
-          req.userId,
-        );
+        // usage for this attempt was already recorded above (per-attempt ledger)
         return {
           data: validated.data,
           usage: lastUsage,

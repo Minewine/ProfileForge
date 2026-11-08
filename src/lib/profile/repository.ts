@@ -229,6 +229,7 @@ export async function updateEntry(userId: string, section: SectionName, id: stri
 export async function deleteEntry(userId: string, section: SectionName, id: string) {
   const profile = await getOrCreateProfile(userId);
   return db.$transaction(async (tx) => {
+    await findEntry(tx, section, id, profile.id); // ownership check — foreign/missing rows → NOT_FOUND
     await delegate(tx, section).delete({ where: { id } });
     return commitMutation(tx, profile.id, "edit");
   });

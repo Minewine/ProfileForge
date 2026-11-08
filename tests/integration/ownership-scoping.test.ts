@@ -234,3 +234,25 @@ describe("generation jobs are scoped through their analysis", () => {
     }
   });
 });
+
+describe("profile entries are scoped to their owner", () => {
+  it("refuses to delete another user's entry (NOT_FOUND) and leaves it intact", async () => {
+    const aliceProfile = await db.profile.create({ data: { userId: alice.id, language: "en" } });
+    const skill = await db.skill.create({ data: { profileId: aliceProfile.id, name: "Go" } });
+
+    await signOut();
+    await signIn("bob-isolation@example.com");
+    const { DELETE } = await import("@/app/api/profile/entries/[section]/[id]/route");
+    const routeArgs = { params: Promise.resolve({ section: "skills", id: skill.id }) } as never;
+    const res = await DELETE(jsonReq(`/profile/entries/skills/${skill.id}`, "DELETE") as never, routeArgs);
+    expect(res.status).toBe(404);
+    expect((await res.json()).error.code).toBe("NOT_FOUND");
+    expect(await db.skill.findUnique({ where: { id: skill.id } })).not.toBeNull(); // intact
+
+    // The owner can still delete their own entry.
+    await signIn("alice-isolation@example.com");
+    const ok = await DELETE(jsonReq(`/profile/entries/skills/${skill.id}`, "DELETE") as never, routeArgs);
+    expect(ok.status).toBe(200);
+    expect(await db.skill.findUnique({ where: { id: skill.id } })).toBeNull();
+  });
+});

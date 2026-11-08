@@ -238,7 +238,10 @@ function AnalysisPageInner() {
               <div key={r.id} className="grid grid-cols-12 items-center gap-2">
                 <Input
                   className="col-span-5"
-                  value={r.text}
+                  // uncontrolled (like the profile editor): a refetch landing
+                  // mid-edit must never clobber the DOM while the user types
+                  // (P1 review — controlled inputs snapped back to saved text)
+                  defaultValue={r.text}
                   onChange={(e) => updateRequirement(i, { text: e.target.value })}
                   placeholder="Requirement text"
                 />

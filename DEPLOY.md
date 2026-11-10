@@ -38,8 +38,8 @@ Environment variables (set in cPanel → Setup Node.js App → env vars):
    Note the generated names (`ramemvpl_*`).
 2. **Node app**: cPanel → Setup Node.js App → Create:
    Node 20 · app root `profile-forge` · app URL `profile-forge` · startup file
-   `server.js`. Then add the env vars above and click **Run NPM Install → off /
-   just Restart later** (we ship `node_modules` prebuilt).
+   `bootstrap.js` (runs migrations, then boots the server). Then add the env
+   vars above — no npm install needed, `node_modules` ships prebuilt.
 3. **Remote DB access** (optional): cPanel → Remote PostgreSQL → add the build
    machine's IP. **On this host the page is disabled** — apply migrations via
    phpPgAdmin instead (see "Migrations & demo seed").
@@ -51,28 +51,28 @@ Environment variables (set in cPanel → Setup Node.js App → env vars):
 git worktree add ../pf-deploy HEAD       # clean tree, never the dirty workdir
 cd ../pf-deploy && npm ci                # postinstall runs prisma generate
 NEXT_BASE_PATH=/profile-forge npm run build
-cp -r public .next/standalone/public
-cp -r .next/static .next/standalone/.next/static
-tar czf ../profileforge-bundle.tar.gz -C .next/standalone .
+cd .next/standalone
+cp -r ../../public . && cp -r ../../.next/static .next/static
+cp -r ../../prisma .                     # schema + migrations for bootstrap
+mkdir -p node_modules/@prisma
+cp -r ../../node_modules/prisma node_modules/
+cp -r ../../node_modules/@prisma/engines node_modules/@prisma/
+# add bundle-only files: bootstrap.js (Passenger startup: migrate deploy then
+# require ./server.js) and prisma.config.js (env-driven, no dotenv)
+tar czf ../../profileforge-bundle.tar.gz .
 ```
 
 Upload the single `.tar.gz` (SFTP), then cPanel File Manager → `~/profile-forge`
-→ Extract. That's the whole deploy — no npm install on the server.
+→ Extract. Migrations apply automatically on the first Passenger start (and on
+every restart — `migrate deploy` is idempotent), so no manual SQL, no phpPgAdmin.
 
 ## Migrations & demo seed
 
-**This host has Remote PostgreSQL disabled** — remote `psql`/`prisma migrate
-deploy` from a build machine cannot connect. Apply schema changes through
-**cPanel → phpPgAdmin → select `ramemvpl_profileforge` → SQL tab → paste → Execute**:
-
-```bash
-# generate the full-schema SQL (Prisma 7 flags: --from-empty / --to-schema)
-npx prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script
-```
-
-The app does not need `_prisma_migrations` history at runtime; future schema
-changes go through the same diff-SQL paste. Demo seed is optional and skipped
-unless remote access exists (or a seed endpoint is added later).
+**Automatic.** The bundle ships the Prisma CLI + engines + `prisma/migrations`;
+the Passenger startup file (`bootstrap.js`) runs `prisma migrate deploy` before
+booting the server. Future schema changes = commit migrations, rebuild bundle,
+re-extract, restart. (phpPgAdmin's SQL tab on this host cannot execute
+multi-statement batches — do not paste SQL there.)
 
 ## Verify
 

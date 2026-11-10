@@ -1,130 +1,149 @@
 # ProfileForge
 
-A local-first web application that turns your existing CV into a structured, provenance-tracked
-profile and later generates ATS-optimized, fact-checked CVs and cover letters from it. Every
-material claim is traceable to profile evidence — nothing is ever invented.
+A self-hostable web application that turns your existing CV into a structured,
+provenance-tracked profile and generates ATS-optimized, fact-checked CVs and cover letters
+from it against a pasted job description. Matching and scoring are deterministic and
+reproducible, every material claim in generated documents traces back to profile evidence,
+and every exported PDF is verified by automated text extraction — nothing is invented and
+nothing unreadable is downloadable.
 
-**Status**: all eight planned feature slices are implemented and verified (2026-10-28: production
-build, lint, and the full test suites green — 440 Vitest tests, 45/46 Playwright e2e with one
-key-gated skip): CV ingestion & structured
-profile ([001](specs/001-ats-cv-tailoring)), JD analysis & deterministic matching
-([002](specs/002-jd-matching)), evidence-aware CV + cover-letter generation with prompt-driven JD
-tailoring and verified PDF export ([003](specs/003-cv-generation)), profile-editor e2e suite
-([004](specs/004-profile-editing-e2e)), explicit selection & omissions
-([005](specs/005-cv-selection-refinement)), polish & reliability ([006](specs/006-polish-reliability)),
-profile-editor CRUD fix ([007](specs/007-fix-profile-editor-crud)), multi-user isolation
-([008](specs/008-multi-user-isolation)), and the evaluation benchmark
-([009](specs/009-evaluation-benchmark)). Full status report: [STATUS.md](STATUS.md).
+**Status** (2026-11-02, see [STATUS.md](STATUS.md)): all ten feature slices are implemented —
+CV ingestion & profile ([001](specs/001-ats-cv-tailoring)), JD analysis & deterministic matching
+([002](specs/002-jd-matching)), evidence-aware generation + verified export
+([003](specs/003-cv-generation)), profile-editor e2e suite ([004](specs/004-profile-editing-e2e)),
+selection & omissions ([005](specs/005-cv-selection-refinement)), polish & reliability
+([006](specs/006-polish-reliability)), profile-editor CRUD fixes ([007](specs/007-fix-profile-editor-crud)),
+multi-user isolation ([008](specs/008-multi-user-isolation)), evaluation benchmark
+([009](specs/009-evaluation-benchmark)), GitHub Actions CI ([010](specs/010-github-actions-ci)).
+Verification stack green: `tsc --noEmit` clean, Vitest 473/473, Playwright e2e 45 passed /
+1 skipped (key-gated scenario), CI on `main` green (≈5 min, all six checks). Open items are
+small: recording the live benchmark baseline (blocked on OpenRouter free-tier headroom) and a
+manual GUI sanity pass.
 
-## What works today
+## How it works
 
-- **Upload** a French or English CV (PDF/DOCX, ≤10 MB). Scanned/image-only PDFs are rejected with
-  guidance; CVs over 10 pages require explicit confirmation before a partial parse.
-- **Parse** with your own OpenRouter key (default model `minimax/minimax-m3.1-flash:free`,
-  configurable with a searchable picker in Settings). Dates are normalized deterministically
-  (EN/FR → `YYYY-MM`, ambiguities flagged — never guessed), and every parsed bullet is verified
-  against the extracted source text (≥95% word-level containment) so invented content is flagged.
-- **Import** into a single structured profile with bullet-level provenance (source document + page).
-  Re-imports preserve your manually added entries.
-- **Edit** everything with autosave: all sections, bullet editor, provenance badges, review-flag
-  confirmation, duplicate-skill merge-or-keep, version history with restore.
-- **Validate claims**: a report on the profile that flags dangling provenance and ungrounded content.
-- **Analyze job descriptions** (`/jobs`): paste an FR/EN JD, review extracted requirements, and run the
-  deterministic match — exact (accent-insensitive, whole-phrase) → approved aliases (bilingual built-in
-  list + your per-skill approvals) → LLM-proposed semantic matches that are **evidence-validated**
-  (dangling citations are dropped and counted). The MatchReport shows a reproducible 60/30/10 score with
-  breakdown, per-requirement evidence, recommended/missing keywords, and hard-constraint gaps that
-  semantic resemblance never masks. Analyses are version-pinned, copyable, and re-runnable.
-- **Generate** (from a matched analysis, `/jobs/[id]` step 4): an async job turns the MatchReport into a
-  tailored CV and a complementary cover letter in your chosen output language (FR/EN/DE, defaulting to the
-  JD's language). Content selection is deterministic and evidence-ranked (relevance + strength + impact +
-  recency) with an **explicit per-section cut** ([feature 005](specs/005-cv-selection-refinement)): the
-  persisted SelectionRecord shows each included entry's rank, score, match-method credits, evidence
-  citations, and recency in the UI, and every unselected entry appears in the omissions list with reason
-  `selection` (distinct from `page_budget`) — the union of draft + omissions always covers the whole
-  profile. The premium LLM only rewrites plan items **keyed by id** — bullets **and role titles** — so
-  every material claim carries `sourceBulletIds`/evidence provenance resolved against the profile
-  snapshot pinned at job start (titles fall back verbatim, never title-less). The draft prompt
-  receives the full job description (capped) and rewords the summary and bullets toward its
-  vocabulary, priorities, and framing — **rewording only**: facts are never added, merged, or
-  dropped. The Professional Summary is
-  synthesized from the job's must-have requirements plus the strongest matching evidence, bounded by the
-  user-facing summary-length setting (30–120 words). Page budget (1–3 pages) is enforced by a
-  measure-and-demote loop that records every dropped item as an inspectable, restorable omission.
-  Download gating is purely technical ([feature 006](specs/006-polish-reliability)): PDFs must pass the
-  two-level extraction gate, draft fallbacks (verbatim fallback, uncertain translation) render as a
-  passive "Draft notes" block with one-sentence plain-language explanations, AI-provider failures name
-  their cause (rejected key, exhausted credit, rate limit, unavailability) with a concrete next action,
-  and generation shows a persistent progress indicator. Two
-  render templates are selectable for CVs: the default single-column **ATS** layout and a **designed
-  two-column** template (shaded sidebar with contact/skills/languages, main column with
-  summary/experience/education) that renders every list dynamically — both produce text-layer PDFs that
-  must pass the two-level extraction gate (100% structural recovery + ≥95% per-block word recovery)
-  before download is offered; a failing render is retried, then fails visibly — never downloadable.
-  Cover letters add a tone setting, a 1-page budget, and copyable plain text; CVs add a best-effort DOCX
-  matching the selected template (the PDF is the verified deliverable).
+The user journey is a pipeline; each stage is covered by unit/integration/e2e tests.
 
-### Download gate matrix
+1. **Upload & parse** (`/upload`): a French or English CV (PDF/DOCX, ≤10 MB; scanned PDFs
+   rejected) is text-extracted locally, language-detected, then parsed into a draft profile by
+   the LLM with your own OpenRouter key. Dates normalize deterministically (EN/FR → `YYYY-MM`,
+   ambiguities flagged, never guessed); every parsed bullet is verified against the extracted
+   source text (≥95% word-level containment) so invented content is flagged.
+2. **Profile** (`/profile`): import into a single structured profile with bullet-level
+   provenance (source document + page), full CRUD with autosave, review-flag confirmation,
+   duplicate-skill merge, and version history with restore. A claims report flags dangling
+   provenance and ungrounded content.
+3. **Job analysis** (`/jobs`): paste an FR/EN job description; requirements are extracted
+   (must/nice, hard-constraint flags), then matched deterministically:
+   exact (accent-insensitive, whole-phrase) → approved aliases (built-in bilingual list +
+   per-skill approvals) → LLM-proposed semantic matches that are **evidence-validated**
+   (dangling citations dropped and counted). The MatchReport shows a reproducible
+   60/30/10 score with breakdown, per-requirement evidence, recommended/missing keywords, and
+   hard-constraint gaps that semantic resemblance never masks. Analyses are version-pinned
+   and re-runnable.
+4. **Generation** (async job from a matched analysis): the pipeline stages are
+   `preconditions → plan → draft → fit → render → gate → persist`, with the job state
+   DB-backed (`queued → running → succeeded | failed | cancelled`), cancel/retry endpoints,
+   and client polling. Planning pins a profile snapshot and selects content deterministically
+   (relevance + evidence strength + impact + recency) with an explicit per-section
+   [SelectionRecord](specs/005-cv-selection-refinement) — every excluded entry lands in an
+   inspectable, restorable omissions list. The LLM only rewrites plan items **keyed by id**, so
+   every claim carries `sourceBulletIds`; the draft prompt receives the job description and
+   rewords summary/bullets toward its vocabulary — rewording only, facts are never added,
+   merged, or dropped. A measure-and-demote loop enforces the page budget (1–3 pages) by
+   recording dropped items as omissions.
+5. **Verified download**: PDFs must pass a two-level extraction gate (100% structural
+   recovery + ≥95% per-block word recovery, same accent-insensitive normalization for FR/EN),
+   with up to 3 render attempts — a failing render fails visibly and is never downloadable.
+   Two CV templates ship: the default single-column **ATS** layout and a **designed
+   two-column** layout; CVs also get a best-effort DOCX, cover letters get copyable plain
+   text. Download gating is purely technical; draft fallbacks render as passive notes with
+   plain-language explanations, and provider failures name their cause with a next action.
 
-| Format | Extraction gate | Notes |
-|--------|-----------------|-------|
-| PDF (CV & letter) | required | the verified deliverable; failing renders are never stored |
-| DOCX (CV) | not applied | best-effort convenience output (decided parent exception) |
-| TXT (letter) | not applied | copyable plain text for application forms |
-
-### Generation API
-
-`POST /api/generations` (`{analysisId, kind: "cv" | "cover_letter", settings?}`) → 202; poll
-`GET /api/generations/[id]`; cancel/retry via `POST .../cancel` / `.../retry`; document +
-provenance via `GET .../document`, omission restore via
-`POST .../document/omissions/[omissionId]/restore`; gated downloads via
-`GET /api/generations/[id]/download?format=pdf|docx|txt`. Full contract:
+The generation API: `POST /api/generations` (`{analysisId, kind, settings?}`) → 202; poll
+`GET /api/generations/[id]`; document + provenance via `.../document`; omissions restore via
+`.../document/omissions/[omissionId]/restore`; gated downloads via
+`.../download?format=pdf|docx|txt`. Full contract:
 [specs/003-cv-generation/contracts/api.md](specs/003-cv-generation/contracts/api.md).
+
+## Architecture
+
+Next.js 16 App Router (React 19), everything server-side in route handlers; PostgreSQL via
+Prisma (19 models); no external services besides OpenRouter.
+
+- `src/app/` — pages (`/profile`, `/upload`, `/jobs`, `/settings`, `/login`, `/register`) and
+  API routes under `src/app/api/` (`auth`, `cv`, `jobs`, `generations`, `profile`,
+  `settings`, `validation`)
+- `src/lib/parsing/` — PDF/DOCX text extraction + FR/EN language detection (`franc`)
+- `src/lib/matching/` — the deterministic matching engine (pure functions, no LLM):
+  `engine.ts` (exact → alias → validated semantic), `aliases.ts`, `score.ts` (60/30/10 +
+  evidence bonus)
+- `src/lib/llm/` — task registry + router: five tasks (`parseCV`, `extractRequirements`,
+  `semanticProposals`, `generateTailoredCV`, `generateCoverLetter`), each with Zod-validated
+  payloads and prompts in `prompts/*.md`. A pluggable transport layer serves live OpenRouter
+  calls or the benchmark's record/replay transcripts; per-run usage is logged to `LlmUsageLog`
+  with a DB-derived spend cap
+- `src/lib/generation/` — the job pipeline: `plan.ts` (snapshot + selection), `draft.ts`
+  (keyed LLM rewriting), `fit.ts` (page-budget demote loop), `render/` (PDF via `pdf-lib`,
+  DOCX via `docx`), `verify.ts` (extraction gate), `grounding.ts`, `repository.ts` (atomic
+  job lifecycle)
+- `src/lib/auth/`, `src/lib/settings/` — Argon2id passwords, opaque session tokens
+  (SHA-256 stored, HttpOnly cookie, 30-day sliding), owner-scoped guards on every query,
+  AES-256-GCM-encrypted per-user OpenRouter keys
+- `src/components/` — UI: shadcn-style primitives, profile editor, generation views
+- `prisma/` — schema, migrations, demo seed (`prisma/seed/`); generated client in
+  `src/generated/prisma/` (gitignored)
+- `benchmarks/`, `tests/`, `specs/` — see below
+
+## Key technical choices
+
+- **Deterministic core, LLM at the edges.** Matching, scoring, and content selection are pure,
+  reproducible functions; the LLM only extracts requirements, proposes semantic matches
+  (which the engine evidence-validates), and rewrites keyed plan items. Same inputs → same
+  MatchReport.
+- **Zero invented facts, claim-level provenance.** Parsed and generated bullets carry source
+  references; containment checks (≥95% word-level, accent-insensitive) run at parse time and
+  again at export time.
+- **Verified ATS output, not assumed.** The download gate measures the actual PDF text layer;
+  standard section headings, linear layouts, normalized dates.
+- **Async jobs with atomic lifecycle.** In-process execution, DB-backed status, transitions
+  deduped atomically, cancellation checked at every stage boundary.
+- **Multi-user by default.** Every visitor registers; workspaces (profile, files, analyses,
+  generations, settings) are fully isolated per account; legacy rows stay quarantined until
+  claimed (`npm run db:assign-owner -- --email you@example.com`).
+- **User-supplied LLM budget.** All calls route through the user's OpenRouter key with
+  configurable economy/premium models (defaults: `nvidia/nemotron-3.5-super-vl:free` /
+  `anthropic/claude-sonnet-4.5`) and a per-run cost cap.
+- **Evaluation harness before prompt tuning.** A versioned fixture set, committed baselines,
+  pinned AI transcripts, and a keyless replay mode make the benchmark a deterministic CI
+  regression gate (exit codes 0–3).
 
 ## Setup
 
+Requires Node 20+, npm ≥ 11 (the bundled npm 10.8.2 hits a lockfile bug on incremental
+installs in this repo), and Docker.
+
 ```bash
-docker compose up -d        # PostgreSQL on host port 5435
+docker compose up -d        # PostgreSQL 16 on host port 5435
 cp .env.example .env        # then edit values
 npx prisma migrate dev      # apply schema
 npm run dev                 # http://localhost:3000
 ```
 
-`.env` values:
-
 | Var | Purpose |
 |-----|---------|
-| `DATABASE_URL` | Postgres connection (docker compose default: `postgresql://profileforge:profileforge@localhost:5435/profileforge`) |
-| `OPENROUTER_API_KEY` | your key; alternatively save it in the Settings UI (stored AES-256-GCM encrypted) |
+| `DATABASE_URL` | Postgres connection (compose default: `postgresql://profileforge:profileforge@localhost:5435/profileforge`) |
+| `OPENROUTER_API_KEY` | your key; alternatively save it in Settings (stored AES-256-GCM encrypted, per user) |
 | `APP_SECRET` | 32+ chars; encrypts a Settings-stored key (auto-generated `.appsecret` fallback) |
 | `UPLOADS_DIR` | where uploaded CVs are stored (default `./uploads`) |
 
-The first run of the test suite generates fixtures: `npm run fixtures`.
-
-## Accounts & multi-user
-
-Every visitor must register (email + password, ≥8 chars) before reaching the app; each account gets
-a fully isolated workspace — profile, uploaded CVs, job analyses, generated documents, files, and
-settings ([specs/008-multi-user-isolation](specs/008-multi-user-isolation)). Sessions are opaque
-tokens in an HttpOnly cookie (`pf_session`, 30 days, sliding renewal); only the token's SHA-256 is
-stored server-side. Passwords are Argon2id-hashed; OpenRouter keys stay AES-256-GCM encrypted, now
-per user.
-
-**Upgrading a pre-multi-user installation**: the schema change quarantines all existing rows
-(owner-less rows are invisible to every account). Claim them for one designated owner after
-registering that account:
-
-```bash
-npm run db:assign-owner -- --email you@example.com   # creates the account if absent, then claims all legacy data
-```
-
-The script is idempotent; re-running claims nothing new. Unclaimed data stays invisible to everyone
-until claimed — it is never exposed to other accounts.
+Register an account in the UI to get an isolated workspace; everything up to and including
+the MatchReport works without an OpenRouter key — only parsing and generation call the LLM.
 
 ### Demo accounts
 
-Two disposable accounts with rich, fully populated profiles ship with the repo for demos and manual
-testing. **Local/demo use only — never reuse these credentials anywhere real.**
+Two disposable accounts with rich, fully populated profiles ship for demos and manual testing.
+**Local/demo use only — never reuse these credentials anywhere real.**
 
 | Account | Email | Password | Profile |
 |---------|-------|----------|---------|
@@ -137,83 +156,58 @@ npm run seed:demo-en   # create or refresh the English demo account + profile
 npm run demo:reset     # drop both demo users, then re-seed both from scratch
 ```
 
-All three commands are idempotent and safe to re-run; a reseed cleanly replaces the demo profile and
-its sample analysis and never touches rows belonging to other accounts. Each seed also pre-matches
-the demo profile against the sample job descriptions `fixtures/demo-jd-fr.txt` and
-`fixtures/demo-jd-en.txt`, so `/jobs` already shows a reproducible MatchReport without any LLM calls:
-the requirements are hand-extracted (standing in for the LLM extraction step), while matching and
-scoring run the app's real deterministic engine. CV/cover-letter generation (step 4) still needs an
-OpenRouter key — everything up to the MatchReport works keylessly.
+All three are idempotent and never touch rows belonging to other accounts. Each seed
+pre-matches the demo profile against `fixtures/demo-jd-fr.txt` / `fixtures/demo-jd-en.txt`,
+so `/jobs` shows a real MatchReport without any LLM calls (requirements are hand-extracted;
+matching and scoring run the real deterministic engine).
 
-## Tests
+## Tests & CI
 
 ```bash
-npm test        # vitest: unit (dates, language, containment, router, keystore, generation pipeline)
-                # + integration (routes w/ test DB, incl. the full generation/gate flows)
-npm run build   # production build
-
+npm test              # Vitest: unit + integration (routes against a test DB)
+npm run build         # production build
 npm run e2e:install   # one-time: Chromium for Playwright
-npm run test:e2e      # browser-level profile-editor suite (specs/004-profile-editing-e2e)
+npm run test:e2e      # browser suite (always enter through this script — it resets the e2e DB first)
 ```
 
-The vitest suite runs against a `profileforge_test` database and the E2E suite against a dedicated
-`profileforge_e2e` database (compose service `e2e-db` on port **5434**, `uploads-e2e/`): both are
-physically isolated from your dev data, and the E2E harness aborts before mutating anything unless its
-database URL targets `profileforge_e2e`. LLM calls are mocked in vitest; the E2E suite needs no API key
-(fixtures seed through the app's own routes), and its optional upload scenario self-skips without one.
+The Vitest suite runs against `profileforge_test` and e2e against a dedicated
+`profileforge_e2e` database (compose service `e2e-db`, port 5434) — both physically isolated
+from dev data. LLM calls are mocked in Vitest; e2e needs no API key and its one live
+upload/parse scenario self-skips without one.
 
-### CI (specs/010-github-actions-ci)
+**CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml), specs/010): on every push and
+PR, one job runs lint → typecheck → build → Vitest (Postgres 16 service container) →
+Playwright e2e → keyless benchmark. Caches for dependencies and browsers, concurrency
+cancellation for superseded runs, and a failed-run e2e HTML report upload (7-day retention).
 
-GitHub Actions (`.github/workflows/ci.yml`) runs the same checks on every push and pull request, in one
-job: lint → typecheck (`next typegen && tsc --noEmit`) → build → Vitest → Playwright e2e → keyless benchmark
-(deterministic regression gate over matching/selection/render, no AI key) — any failure fails the run.
-The Vitest suite runs against a Postgres 16 **service container** (same image/credentials as compose
-`db`; the harness auto-creates and migrates `profileforge_test` there), while e2e keeps using its own
-compose `e2e-db`. Dependencies and Playwright browsers are cached between runs, superseded runs on the
-same branch are cancelled, and a failed e2e run uploads its HTML report (7-day retention) for diagnosis.
-
-### Benchmark (specs/009-evaluation-benchmark)
+**Benchmark** (specs/009, [benchmarks/README.md](benchmarks/README.md)):
 
 ```bash
-npm run benchmark -- --keyless   # deterministic stages over the pinned fixture set (no AI key needed)
+npm run benchmark -- --keyless   # deterministic stages over the pinned fixture set (no AI key)
 npm run benchmark -- --record    # live run that also pins AI transcripts for --keyless
 npm run benchmark                # full live evaluation with baseline comparison
 ```
 
 Measures generation quality (requirement coverage + six deterministic metrics) over the
-version-controlled fixture set in `benchmarks/fixtures/`, compares against the committed baseline, and exits `0` pass / `1` regressed /
-`2` incomplete / `3` config error — see [benchmarks/README.md](benchmarks/README.md) and
-[specs/009-evaluation-benchmark](specs/009-evaluation-benchmark). Live runs target their own
+committed fixture set in `benchmarks/fixtures/`, compares against the committed baseline, and
+exits `0` pass / `1` regressed / `2` incomplete / `3` config error. Live runs target their own
 `profileforge_benchmark` database and cost real money (default spend cap `$1.00`).
 
-## Project layout
+## Project layout & documents
 
-- `src/app/` — App Router pages (`/profile`, `/upload`, `/jobs`, `/settings`, `/login`, `/register`)
-  and all API routes under `src/app/api/`
-- `src/lib/` — domain logic: `parsing/` (PDF/DOCX + language detection), `matching/`,
-  `generation/` (pipeline, plan, draft, fit, render, verify), `llm/` (OpenRouter router + task
-  prompts), `settings/`, `validation/`, `auth/`, `profile/` & `jobs/` repositories
-- `src/components/` — UI: shadcn-style primitives (`ui/`), profile editor, generation views
-- `prisma/` — schema (19 models), migrations, and demo seed data (`prisma/seed/`); generated client
-  lives in `src/generated/prisma/`
-- `fixtures/` — sample job descriptions for the demo accounts (see *Demo accounts*)
-- `tests/` — `unit/` + `integration/` (Vitest), `e2e/` (Playwright, seeded through the app's own API)
-- `specs/` — one spec-kit directory per feature slice (see below)
-
-## Design documents
-
-Each slice has a directory under `specs/` (`001-ats-cv-tailoring` … `008-multi-user-isolation`) with
-`spec.md` (requirements), `plan.md` (architecture), `data-model.md`, `contracts/` where applicable,
-`quickstart.md` (validation scenarios), and `tasks.md` (checked-off task list). Slice 001 is the
-parent spec and the best starting point for architecture.
-The authoritative product reference is [ProfileForge-Specification.md](ProfileForge-Specification.md);
-[STATUS.md](STATUS.md) tracks what is done, what is verified, and what to build next.
+- `specs/` — one spec-kit directory per slice (`spec.md`, `plan.md`, `data-model.md`,
+  `contracts/`, `quickstart.md`, checked-off `tasks.md`). Slice
+  [001](specs/001-ats-cv-tailoring) is the parent spec and the best architecture starting point.
+- [ProfileForge-Specification.md](ProfileForge-Specification.md) — the authoritative product
+  reference (vision, principles, schemas, LLM task contracts).
+- [STATUS.md](STATUS.md) — current state: what is done, verified, and open.
+- [docs/review-2026-11-08.md](docs/review-2026-11-08.md) — architecture/code review report.
 
 ## Notes
 
-- Multi-user (specs/008): email+password accounts, per-user data isolation, per-user encrypted
-  OpenRouter key. Uploads and generated artifacts remain on local disk; single instance.
-- `:free` OpenRouter models are rate-limited (≈20 req/min) — a parse failure with
+- `:free` OpenRouter models are rate-limited (≈20 req/min); a parse failure with
   `LLM_RATE_LIMITED` means wait a minute or switch models in Settings.
-- Use npm ≥ 11 for package installs (`npx npm@11 install`); the bundled npm 10.8.2 hits a
-  lockfile bug on incremental installs in this repo.
+- Uploads and generated artifacts live on local disk; the app is single-instance by design
+  (horizontal scaling deliberately deferred).
+- Also deferred by scope decision: multiple profiles per user, account deletion / password
+  reset / email verification, cover-letter DOCX, job-board integrations.

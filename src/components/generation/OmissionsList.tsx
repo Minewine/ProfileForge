@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/base-path";
 
 // Local view type over the API payload (importing lib schemas would pull
 // node:crypto into the client bundle — same convention as GenerationPanel).
@@ -40,7 +41,7 @@ export function OmissionsList({
     setError(null);
     try {
       const res = await fetch(
-        `/api/generations/${jobId}/document/omissions/${encodeURIComponent(omissionId)}/restore`,
+        apiUrl(`/api/generations/${jobId}/document/omissions/${encodeURIComponent(omissionId)}/restore`),
         { method: "POST" },
       );
       if (!res.ok) {

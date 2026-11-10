@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { apiUrl } from "@/lib/base-path";
 
 /**
  * Top navigation for the subpages. Signed-in identity comes from
@@ -15,7 +16,7 @@ export function SiteNav() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/session")
+    fetch(apiUrl("/api/auth/session"))
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
         if (!cancelled) setEmail(body?.user?.email ?? null);
@@ -27,7 +28,7 @@ export function SiteNav() {
   }, []);
 
   async function signOut() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch(apiUrl("/api/auth/logout"), { method: "POST" });
     router.push("/login");
     router.refresh();
   }

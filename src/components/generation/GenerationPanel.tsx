@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { OmissionsList } from "@/components/generation/OmissionsList";
 import { SelectionView, type SelectionRecordView } from "@/components/generation/SelectionView";
 import { describeError, FLAG_EXPLANATIONS, type DescribedError } from "@/lib/client-messages";
+import { apiUrl } from "@/lib/base-path";
 
 // Local view types over the API payloads (importing lib schemas would pull
 // node:crypto into the client bundle — same convention as the jobs page).
@@ -201,7 +202,7 @@ export function GenerationPanel({
 
   const refresh = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/api/generations/${id}`);
+      const res = await fetch(apiUrl(`/api/generations/${id}`));
       if (res.status === 404) {
         // the job row is gone (deleted in another tab) — terminal, stop polling
         setPollGone(true);
@@ -224,7 +225,7 @@ export function GenerationPanel({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const res = await fetch(`/api/generations?analysisId=${analysisId}`);
+      const res = await fetch(apiUrl(`/api/generations?analysisId=${analysisId}`));
       if (!res.ok || cancelled) return;
       const { generations } = (await res.json()) as {
         generations: Array<{ generationJobId: string; kind: string }>;
@@ -265,7 +266,7 @@ export function GenerationPanel({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/generations", {
+      const res = await fetch(apiUrl("/api/generations"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -317,7 +318,7 @@ export function GenerationPanel({
   /** US6: copy the letter's plain-text artifact to the clipboard. */
   async function copyLetterText() {
     if (!jobId) return;
-    const res = await fetch(`/api/generations/${jobId}/download?format=txt`);
+    const res = await fetch(apiUrl(`/api/generations/${jobId}/download?format=txt`));
     if (!res.ok) return;
     await navigator.clipboard.writeText(await res.text());
     setCopied(true);
@@ -558,7 +559,7 @@ export function GenerationPanel({
                   return document.downloadable[format] ? (
                     <a
                       key={format}
-                      href={`/api/generations/${jobId}/download?format=${format}`}
+                      href={apiUrl(`/api/generations/${jobId}/download?format=${format}`)}
                       download
                       className={cn(
                         "inline-flex h-8 items-center justify-center rounded-md border border-neutral-300",

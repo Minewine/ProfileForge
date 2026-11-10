@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SiteNav } from "@/components/site-nav";
 import { describeError, type DescribedError } from "@/lib/client-messages";
+import { apiUrl } from "@/lib/base-path";
 
 type AnalysisSummary = {
   id: string;
@@ -39,7 +40,7 @@ export function JobsView() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/jobs");
+    const res = await fetch(apiUrl("/api/jobs"));
     if (res.ok) setAnalyses(((await res.json()).analyses ?? []) as AnalysisSummary[]);
   }, []);
 
@@ -52,7 +53,7 @@ export function JobsView() {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch("/api/jobs", {
+      const res = await fetch(apiUrl("/api/jobs"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -74,7 +75,7 @@ export function JobsView() {
 
   async function remove(id: string) {
     if (!confirm("Delete this analysis? Its requirements and report are removed too.")) return;
-    await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+    await fetch(apiUrl(`/api/jobs/${id}`), { method: "DELETE" });
     await load();
   }
 

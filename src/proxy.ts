@@ -15,7 +15,11 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasSessionCookie = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
   if (!hasSessionCookie && (pathname === "/" || PROTECTED_PAGE.test(pathname))) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    // Clone nextUrl so the redirect keeps the basePath prefix (a plain
+    // new URL("/login", request.url) would drop it and 404 behind the proxy).
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    return NextResponse.redirect(loginUrl);
   }
   return NextResponse.next();
 }

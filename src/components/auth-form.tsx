@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiUrl } from "@/lib/base-path";
 
 const ERROR_MESSAGES: Record<string, string> = {
   INVALID_CREDENTIALS: "Invalid email or password.",
@@ -31,7 +32,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(isLogin ? "/api/auth/login" : "/api/auth/register", {
+      const res = await fetch(apiUrl(isLogin ? "/api/auth/login" : "/api/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

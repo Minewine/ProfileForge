@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SiteNav } from "@/components/site-nav";
 import { GenerationPanel } from "@/components/generation/GenerationPanel";
+import { apiUrl } from "@/lib/base-path";
 
 type Requirement = {
   id: string;
@@ -77,7 +78,7 @@ function AnalysisPageInner() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/jobs/${id}`);
+    const res = await fetch(apiUrl(`/api/jobs/${id}`));
     if (res.ok) {
       const body = (await res.json()).analysis as Analysis;
       setAnalysis(body);
@@ -94,7 +95,7 @@ function AnalysisPageInner() {
     setBusy(true);
     setStatus(null);
     try {
-      const res = await fetch(`/api/jobs/${id}${path}`, {
+      const res = await fetch(apiUrl(`/api/jobs/${id}${path}`), {
         headers: { "Content-Type": "application/json" },
         ...init,
       });

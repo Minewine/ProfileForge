@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SiteNav } from "@/components/site-nav";
+import { apiUrl } from "@/lib/base-path";
 
 type SettingsDto = {
   keyConfigured: boolean;
@@ -29,7 +30,7 @@ export function SettingsView() {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/settings");
+    const res = await fetch(apiUrl("/api/settings"));
     const dto = (await res.json()) as SettingsDto;
     setSettings(dto);
     setModelEconomy(dto.modelEconomy);
@@ -44,7 +45,7 @@ export function SettingsView() {
 
   async function saveKey() {
     setMessage(null);
-    const res = await fetch("/api/settings", {
+    const res = await fetch(apiUrl("/api/settings"), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ openRouterKey: newKey }),
@@ -68,7 +69,7 @@ export function SettingsView() {
 
   async function saveModels() {
     setMessage(null);
-    const res = await fetch("/api/settings", {
+    const res = await fetch(apiUrl("/api/settings"), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -204,7 +205,7 @@ function ModelPicker({
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      const res = await fetch(`/api/settings/models?q=${encodeURIComponent(value)}`);
+      const res = await fetch(apiUrl(`/api/settings/models?q=${encodeURIComponent(value)}`));
       if (res.ok) {
         const body = (await res.json()) as { models: ModelInfo[] };
         setResults(body.models);

@@ -7,6 +7,9 @@ const basePath = process.env.NEXT_BASE_PATH || undefined;
 
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath } : {}),
+  // Raw fetch() calls and plain <a href> are not basePath-prefixed by Next;
+  // expose the same value to client code (see src/lib/base-path.ts).
+  env: { NEXT_PUBLIC_BASE_PATH: basePath ?? "" },
   // Self-contained server (node .next/standalone/server.js) for hosts where
   // we ship a prebuilt bundle instead of running npm install.
   output: "standalone",

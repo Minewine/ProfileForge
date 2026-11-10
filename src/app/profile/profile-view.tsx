@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { SiteNav } from "@/components/site-nav";
+import { apiUrl } from "@/lib/base-path";
 
 type Entry = Record<string, unknown> & {
   id: string;
@@ -153,7 +154,7 @@ export function ProfileEditorView() {
   const [basicsReset, setBasicsReset] = useState(0);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/profile");
+    const res = await fetch(apiUrl("/api/profile"));
     const body = await res.json();
     setProfile(body.profile as ProfileDto);
     profileRef.current = body.profile as ProfileDto;
@@ -161,7 +162,7 @@ export function ProfileEditorView() {
   }, []);
 
   const loadVersions = useCallback(async () => {
-    const res = await fetch("/api/profile/versions");
+    const res = await fetch(apiUrl("/api/profile/versions"));
     const body = await res.json();
     setVersions(body.versions as VersionInfo[]);
   }, []);
@@ -270,7 +271,7 @@ export function ProfileEditorView() {
   async function patchProfile(patch: Record<string, unknown>): Promise<boolean> {
     beginSave();
     try {
-      const res = await fetch("/api/profile", {
+      const res = await fetch(apiUrl("/api/profile"), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -295,7 +296,7 @@ export function ProfileEditorView() {
   async function saveEntry(section: string, id: string, patch: Record<string, unknown>): Promise<boolean> {
     beginSave();
     try {
-      const res = await fetch(`/api/profile/entries/${section}/${id}`, {
+      const res = await fetch(apiUrl(`/api/profile/entries/${section}/${id}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -329,7 +330,7 @@ export function ProfileEditorView() {
   async function addEntry(section: string) {
     beginSave();
     try {
-      const res = await fetch(`/api/profile/entries/${section}`, {
+      const res = await fetch(apiUrl(`/api/profile/entries/${section}`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(ADD_PLACEHOLDERS[section] ?? {}),
@@ -363,7 +364,7 @@ export function ProfileEditorView() {
     cancelEntryTimers(section, id);
     beginSave();
     try {
-      const res = await fetch(`/api/profile/entries/${section}/${id}`, { method: "DELETE" });
+      const res = await fetch(apiUrl(`/api/profile/entries/${section}/${id}`), { method: "DELETE" });
       if (res.ok) {
         const body = (await res.json()) as { version: number };
         setStatus(`Deleted · v${body.version}`);
@@ -393,7 +394,7 @@ export function ProfileEditorView() {
     pendingBasics.current = {};
     beginSave();
     try {
-      const res = await fetch(`/api/profile/versions/${version}/restore`, { method: "POST" });
+      const res = await fetch(apiUrl(`/api/profile/versions/${version}/restore`), { method: "POST" });
       if (res.ok) {
         setStatus(`Restored v${version}`);
         await load();
@@ -410,7 +411,7 @@ export function ProfileEditorView() {
   }
 
   async function runClaims() {
-    const res = await fetch("/api/validation/claims", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const res = await fetch(apiUrl("/api/validation/claims"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
     if (res.ok) setClaims(await res.json());
   }
 

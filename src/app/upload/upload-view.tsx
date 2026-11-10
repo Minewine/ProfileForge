@@ -9,6 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { SiteNav } from "@/components/site-nav";
 import { Select } from "@/components/ui/select";
 import { describeError, type DescribedError } from "@/lib/client-messages";
+import { apiUrl } from "@/lib/base-path";
 
 // The upload workspace's server state (extracted text, parse draft) lives on the
 // SourceDocument row; this pointer is the only client-only piece. Keeping it in
@@ -65,7 +66,7 @@ export function UploadView() {
     const id = localStorage.getItem(UPLOAD_DOC_KEY);
     if (!id) return;
     void (async () => {
-      const res = await fetch(`/api/cv/${id}`);
+      const res = await fetch(apiUrl(`/api/cv/${id}`));
       if (!res.ok) {
         localStorage.removeItem(UPLOAD_DOC_KEY);
         return;
@@ -86,7 +87,7 @@ export function UploadView() {
     setImported(null);
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch("/api/cv/upload", { method: "POST", body: form });
+    const res = await fetch(apiUrl("/api/cv/upload"), { method: "POST", body: form });
     if (!res.ok) {
       setError(await readError(res));
       return;
@@ -100,7 +101,7 @@ export function UploadView() {
   async function correctLanguage(lang: "fr" | "en") {
     if (!upload || lang === language) return;
     setLanguage(lang);
-    const res = await fetch(`/api/cv/${upload.sourceDocumentId}`, {
+    const res = await fetch(apiUrl(`/api/cv/${upload.sourceDocumentId}`), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ language: lang }),
@@ -113,7 +114,7 @@ export function UploadView() {
     setParsing(true);
     setError(null);
     try {
-      const res = await fetch(`/api/cv/${upload.sourceDocumentId}/parse`, {
+      const res = await fetch(apiUrl(`/api/cv/${upload.sourceDocumentId}/parse`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(confirmPartial ? { confirmPartial: true } : {}),
@@ -138,7 +139,7 @@ export function UploadView() {
   async function runImport(mode: "replace_parsed" | "merge") {
     if (!upload) return;
     setError(null);
-    const res = await fetch("/api/profile/import", {
+    const res = await fetch(apiUrl("/api/profile/import"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sourceDocumentId: upload.sourceDocumentId, mode }),

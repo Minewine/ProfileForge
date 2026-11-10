@@ -7,11 +7,17 @@ task registration — and therefore startup — loudly.
 
 Rules for editing these files:
 
-- **Zero-invention rules are non-negotiable.** Every prompt contains the
-  "Rules (non-negotiable)" block that forbids inventing facts, IDs, dates, or
-  metrics and mandates JSON-only responses. Any edit must preserve that
-  contract; the surrounding Zod schemas and key-echoing logic enforce it in
-  code, but the prompt is the first line of defense.
+- **Zero-invention rules are non-negotiable at every grounding level.** Every
+  prompt contains the "Rules (non-negotiable)" block that forbids inventing
+  facts, IDs, dates, or metrics and mandates JSON-only responses, and it applies
+  to all three generation-time grounding levels (`strict`/`polished`/
+  `embellished`): polished/embellished relax only *framing*, and their extra
+  permissions are code-assembled in `src/lib/llm/prompts/groundingLevels.ts`,
+  never written here. These `.md` files must keep rendering byte-identically at
+  `strict` — the keyless benchmark replays task payloads recorded against them.
+  Any edit must preserve that contract; the surrounding Zod schemas and
+  key-echoing logic enforce it in code, but the prompt is the first line of
+  defense.
 - **Only `{summaryMaxWords}` is a placeholder** (in `generateTailoredCV.md`).
   It is substituted per request in `src/lib/llm/tasks/generatetailoredcv.ts` —
   plain string replacement, no template engine. Do not add other placeholders

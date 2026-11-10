@@ -208,6 +208,7 @@ describe("POST /api/generations", () => {
       outputLanguage: "fr",
       pageBudget: 2,
       tone: "professional",
+      groundingLevel: "strict", // resolved default when the request omits it
       summaryMaxWords: 60,
       templateId: "ats",
       notes: "emphasize backend",
@@ -247,6 +248,28 @@ describe("POST /api/generations", () => {
     expect(body.settings).toMatchObject({ summaryMaxWords: 90 });
     const row = await db.generationJob.findUniqueOrThrow({ where: { id: body.generationJobId } });
     expect(row.settings).toMatchObject({ summaryMaxWords: 90 });
+  });
+
+  it("accepts settings.groundingLevel (echoed in the 202 body, frozen on the job) and rejects invalid values", async () => {
+    const analysisId = await matchedAnalysis(JD_EN);
+    const { POST } = await import("@/app/api/generations/route");
+
+    const bad = await POST(
+      jsonReq(BASE, "POST", { analysisId, kind: "cv", settings: { groundingLevel: "wild" } }) as never,
+    );
+    expect(bad.status).toBe(400);
+
+    // explicit non-strict value on a cover_letter — the dial is not kind-gated
+    const res = await POST(
+      jsonReq(BASE, "POST", { analysisId, kind: "cover_letter", settings: { groundingLevel: "polished" } }) as never,
+    );
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body.settings).toMatchObject({ groundingLevel: "polished" });
+
+    const { GET } = await import("@/app/api/generations/[id]/route");
+    const polled = await GET(null as never, args(body.generationJobId));
+    expect((await polled.json()).job.settings).toMatchObject({ groundingLevel: "polished" });
   });
 });
 

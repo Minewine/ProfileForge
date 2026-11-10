@@ -84,6 +84,30 @@ test.describe("Feature 005 — selection & rewriting views", () => {
     ]);
   });
 
+  test("the grounding level select renders its three levels, defaults to strict, and explains the choice", async ({
+    page,
+  }) => {
+    await page.goto(`/jobs/${seedState.generation.analysisId}`);
+    await expect(page.getByText("Version 1", { exact: true })).toBeVisible();
+
+    const grounding = page.getByLabel("Grounding level");
+    await expect(grounding).toBeVisible();
+    await expect(grounding).toHaveValue("strict"); // the default level
+    await expect(grounding.getByRole("option", { name: "Strict — evidence only" })).toBeAttached();
+    await expect(grounding.getByRole("option", { name: "Polished — stronger wording" })).toBeAttached();
+    await expect(grounding.getByRole("option", { name: "Embellished — qualitative color" })).toBeAttached();
+
+    // the helper line under the select tracks the selection
+    const explanation = page.getByTestId("gen-grounding-explanation");
+    await expect(explanation).toHaveText(
+      "The AI only rephrases and translates what is already in your profile — nothing is added beyond it.",
+    );
+    await grounding.selectOption("polished");
+    await expect(explanation).toHaveText(
+      "The AI writes more assertively with stronger verbs, while every fact, number, and name still comes from your evidence; anything flagged as unsupported still shows up as a warning.",
+    );
+  });
+
   test("a queued generation shows the progress indicator and disabled-with-reason controls (feature 006 US3)", async ({
     page,
   }) => {

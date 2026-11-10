@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { computePromptSetVersion, loadSystemPrompt, loadSystemPromptFrom } from "@/lib/llm/prompts/load";
+import { GROUNDING_LEVEL_DIRECTIVES } from "@/lib/llm/prompts/groundingLevels";
 import { getTaskDefinition } from "@/lib/llm/registry";
 import { buildParseCvPrompt } from "@/lib/llm/tasks/parsecv";
 // Importing the task modules IS the registration step — each module loads its
@@ -146,5 +147,97 @@ describe("assembled task prompts", () => {
     });
     expect(messages[0]).toEqual({ role: "system", content: loadSystemPrompt("generateCoverLetter.md") });
     expect(messages[1].content).toContain("Max words total: 200");
+  });
+});
+
+// Grounding dial: per-level directives are appended as a "Grounding level:"
+// user-message line ONLY when the level is present and ≠ strict. Strict (the
+// default) must add NOTHING — benchmark transcripts are pinned by exact
+// payload hash, so strict prompts stay byte-identical to pre-feature ones.
+describe("grounding level prompt directives", () => {
+  const cvPayload = (groundingLevel?: string) => ({
+    outputLanguage: "en",
+    plan: [
+      {
+        key: "exp.1.0",
+        kind: "experience",
+        sourceText: ["Built the thing"],
+        entryMeta: { title: "Engineer", company: "Acme", dates: "2021–2023" },
+      },
+    ],
+    skills: ["Go"],
+    summarySources: ["Built the thing"],
+    summaryRequirements: ["Go"],
+    summaryMaxWords: 60,
+    jdDigest: { role: "Backend Engineer", keywords: ["Go"] },
+    pageBudget: 2,
+    ...(groundingLevel === undefined ? {} : { groundingLevel }),
+  });
+
+  const letterPayload = (groundingLevel?: string) => ({
+    outputLanguage: "en",
+    tone: "professional",
+    paragraphs: [{ key: "p1", angle: "motivation", evidenceText: ["Loved Acme since childhood"] }],
+    cvBulletTexts: [],
+    jdDigest: { topRequirements: [] },
+    maxWords: 200,
+    ...(groundingLevel === undefined ? {} : { groundingLevel }),
+  });
+
+  it("generateTailoredCV: strict and absent render byte-identical messages with NO 'Grounding level:' line", () => {
+    const task = getTaskDefinition("generateTailoredCV");
+    const strict = task!.buildPrompt(cvPayload("strict"));
+    const absent = task!.buildPrompt(cvPayload());
+    for (const messages of [strict, absent]) {
+      for (const message of messages) expect(message.content).not.toContain("Grounding level:");
+    }
+    expect(strict).toEqual(absent); // the byte-identical guarantee
+  });
+
+  it("generateTailoredCV: polished/embellished append their directive as the 'Grounding level:' user-message line", () => {
+    const task = getTaskDefinition("generateTailoredCV");
+    for (const level of ["polished", "embellished"] as const) {
+      const messages = task!.buildPrompt(cvPayload(level));
+      expect(messages[1].role).toBe("user");
+      expect(messages[1].content).toContain(`Grounding level: ${level} — ${GROUNDING_LEVEL_DIRECTIVES[level]}`);
+      expect((messages[1].content.match(/Grounding level:/g) ?? []).length, level).toBe(1); // exactly one line
+    }
+  });
+
+  it("generateCoverLetter: strict and absent render byte-identical messages with NO 'Grounding level:' line", () => {
+    const task = getTaskDefinition("generateCoverLetter");
+    const strict = task!.buildPrompt(letterPayload("strict"));
+    const absent = task!.buildPrompt(letterPayload());
+    for (const messages of [strict, absent]) {
+      for (const message of messages) expect(message.content).not.toContain("Grounding level:");
+    }
+    expect(strict).toEqual(absent); // the byte-identical guarantee
+  });
+
+  it("generateCoverLetter: polished/embellished append their directive as the 'Grounding level:' user-message line", () => {
+    const task = getTaskDefinition("generateCoverLetter");
+    for (const level of ["polished", "embellished"] as const) {
+      const messages = task!.buildPrompt(letterPayload(level));
+      expect(messages[1].role).toBe("user");
+      expect(messages[1].content).toContain(`Grounding level: ${level} — ${GROUNDING_LEVEL_DIRECTIVES[level]}`);
+      expect((messages[1].content.match(/Grounding level:/g) ?? []).length, level).toBe(1); // exactly one line
+    }
+  });
+
+  it("the system message carries no directive at any level (code-assembled text never touches the .md prompts)", () => {
+    for (const name of ["generateTailoredCV", "generateCoverLetter"] as const) {
+      const task = getTaskDefinition(name)!;
+      for (const level of ["polished", "embellished"] as const) {
+        const payload = name === "generateTailoredCV" ? cvPayload(level) : letterPayload(level);
+        expect(task.buildPrompt(payload)[0].content, `${name} @ ${level}`).not.toContain("Grounding level:");
+      }
+    }
+  });
+
+  it("both task input schemas reject an out-of-enum groundingLevel", async () => {
+    const { GenerateTailoredCVInputSchema } = await import("@/lib/llm/tasks/generatetailoredcv");
+    const { GenerateCoverLetterInputSchema } = await import("@/lib/llm/tasks/generatecoverletter");
+    expect(GenerateTailoredCVInputSchema.safeParse(cvPayload("aggressive")).success).toBe(false);
+    expect(GenerateCoverLetterInputSchema.safeParse(letterPayload("aggressive")).success).toBe(false);
   });
 });

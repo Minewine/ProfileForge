@@ -36,6 +36,19 @@ export const FLAG_EXPLANATIONS: Record<string, string> = {
     "The AI's rewrite may have added a detail that isn't in the source evidence — double-check it or regenerate.",
 };
 
+/** One-sentence, plain-language explanation per grounding level — the helper
+ *  line under the generation panel's grounding select. Keys mirror
+ *  GroundingLevelSchema (src/lib/generation/schemas.ts) inline: this file must
+ *  stay zero-import, and the prompt-side directives for the non-strict levels
+ *  live in src/lib/llm/prompts/groundingLevels.ts — keep the two in sync. */
+export const GROUNDING_LEVEL_EXPLANATIONS: Record<"strict" | "polished" | "embellished", string> = {
+  strict: "The AI only rephrases and translates what is already in your profile — nothing is added beyond it.",
+  polished:
+    "The AI writes more assertively with stronger verbs, while every fact, number, and name still comes from your evidence; anything flagged as unsupported still shows up as a warning.",
+  embellished:
+    "On top of the polished wording, the AI may add plausible qualitative color around your real experience — but never employers, titles, dates, credentials, technologies, numbers, or new names, and flagged unsupported details still surface as warnings.",
+};
+
 const guidanceFor = (code: string): string | null =>
   LLM_ERROR_GUIDANCE[code] ?? JOB_ERROR_GUIDANCE[code] ?? null;
 

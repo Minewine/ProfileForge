@@ -89,7 +89,7 @@ function contentFixture(overrides: Partial<GeneratedCVContent> = {}): GeneratedC
   };
 }
 
-const SETTINGS: GenerationSettings = { outputLanguage: "fr", pageBudget: 2, tone: "professional", summaryMaxWords: 60 };
+const SETTINGS: GenerationSettings = { outputLanguage: "fr", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 };
 
 function gateArgs(content: GeneratedCVContent, bytes: Uint8Array) {
   return { pdfBytes: bytes, content, snapshot: snapshotFixture(), settings: SETTINGS };
@@ -201,7 +201,7 @@ describe("level-1 title check against the rendered title (feature 005 US2)", () 
         },
       ],
     };
-    const settings: GenerationSettings = { outputLanguage: "en", pageBudget: 2, tone: "professional", summaryMaxWords: 60 };
+    const settings: GenerationSettings = { outputLanguage: "en", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 };
     const rendered = await renderCV({ content: rewritten, snapshot, settings });
     const check = await runExtractionGate({ pdfBytes: rendered.bytes, content: rewritten, snapshot, settings });
     const titleElement = check.level1.elements.find((e) => e.element === "experience:e1:title");

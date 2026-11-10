@@ -1,9 +1,10 @@
 {
   "fixtureSetVersion": "def0ac22b7d52437",
-  "pinnedAt": "2026-10-28T21:14:22.935Z",
-  "pinnedBy": "first baseline (per-case transcripts)",
+  "promptSetVersion": "3a95bb9b24f1cf50",
+  "pinnedAt": "2026-11-08T21:46:45.372Z",
+  "pinnedBy": "grounding dial: prompt-set re-pin after prompts README amendment (metrics unchanged)",
   "codeState": {
-    "sha": "dea4f2c",
+    "sha": "04cb031",
     "dirty": true
   },
   "models": {

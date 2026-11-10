@@ -136,7 +136,7 @@ function contentFixture(overrides: Partial<GeneratedCVContent> = {}): GeneratedC
   };
 }
 
-const SETTINGS: GenerationSettings = { outputLanguage: "fr", pageBudget: 2, tone: "professional", summaryMaxWords: 60 };
+const SETTINGS: GenerationSettings = { outputLanguage: "fr", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 };
 
 async function extractLines(bytes: Uint8Array): Promise<string[]> {
   const pages = await extractPdfPages(bytes);

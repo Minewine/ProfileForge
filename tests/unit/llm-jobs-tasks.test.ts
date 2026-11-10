@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { callLLM, resetTaskRegistry } from "@/lib/llm/router";
 import { ensureExtractRequirementsRegistered } from "@/lib/llm/tasks/extractrequirements";
+import { ensureGenerateCoverLetterRegistered } from "@/lib/llm/tasks/generatecoverletter";
+import { ensureGenerateTailoredCVRegistered } from "@/lib/llm/tasks/generatetailoredcv";
 
 vi.mock("@/lib/settings/models", () => ({
   modelSupportsStructuredOutputs: vi.fn().mockResolvedValue(true),
@@ -64,5 +66,59 @@ describe("extractRequirements task", () => {
     await expect(
       callLLM({ userId: "u-test", task: "extractRequirements", payload: { text: "short", language: "en" } }),
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+});
+
+// Grounding dial: the router validates task payloads against the REAL task
+// input schemas, so an out-of-enum groundingLevel must surface as
+// VALIDATION_ERROR before any network call.
+describe("drafting tasks reject an out-of-enum groundingLevel through callLLM", () => {
+  const cvPayload = {
+    outputLanguage: "en",
+    plan: [
+      {
+        key: "exp.1.0",
+        kind: "experience",
+        sourceText: ["Built the thing"],
+        entryMeta: { title: "Engineer", company: "Acme", dates: "2021–2023" },
+      },
+    ],
+    skills: ["Go"],
+    summarySources: ["Built the thing"],
+    summaryRequirements: ["Go"],
+    summaryMaxWords: 60,
+    jdDigest: { role: "Backend Engineer", keywords: ["Go"] },
+    pageBudget: 2,
+  };
+
+  const letterPayload = {
+    outputLanguage: "en",
+    tone: "professional",
+    paragraphs: [{ key: "p1", angle: "motivation", evidenceText: ["Loved Acme since childhood"] }],
+    cvBulletTexts: [],
+    jdDigest: { topRequirements: [] },
+    maxWords: 200,
+  };
+
+  it("generateTailoredCV: VALIDATION_ERROR, no network call", async () => {
+    ensureGenerateTailoredCVRegistered();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      callLLM({ userId: "u-test", task: "generateTailoredCV", payload: { ...cvPayload, groundingLevel: "aggressive" } }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("generateCoverLetter: VALIDATION_ERROR, no network call", async () => {
+    ensureGenerateCoverLetterRegistered();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      callLLM({ userId: "u-test", task: "generateCoverLetter", payload: { ...letterPayload, groundingLevel: "aggressive" } }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

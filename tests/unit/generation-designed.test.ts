@@ -116,6 +116,7 @@ const DESIGNED: GenerationSettings = {
   outputLanguage: "en",
   pageBudget: 2,
   tone: "professional",
+  groundingLevel: "strict",
   summaryMaxWords: 60,
   templateId: "designed",
 };
@@ -324,7 +325,7 @@ describe("renderDesignedCV (phase 8)", () => {
     const bytes = await renderCVDocx({
       content,
       snapshot,
-      settings: { outputLanguage: "en", pageBudget: 2, tone: "professional", summaryMaxWords: 60 }, // no templateId
+      settings: { outputLanguage: "en", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 }, // no templateId
     });
 
     const tmp = path.join(process.env.UPLOADS_DIR ?? "./uploads-test", `ats-${Date.now()}.docx`);

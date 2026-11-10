@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { OutputLanguageSchema, ToneSchema } from "@/lib/generation/schemas";
+import { GroundingLevelSchema, OutputLanguageSchema, ToneSchema } from "@/lib/generation/schemas";
 import { registerTask, type ChatMessage } from "@/lib/llm/router";
+import { GROUNDING_LEVEL_DIRECTIVES } from "@/lib/llm/prompts/groundingLevels";
 import { loadSystemPrompt } from "@/lib/llm/prompts/load";
 
 export const LETTER_ANGLES = ["motivation", "fit", "achievement"] as const;
@@ -27,6 +28,9 @@ export const GenerateCoverLetterInputSchema = z.object({
   /** Capped raw job-description text — the primary wording target. */
   jobDescription: z.string().min(1).optional(),
   maxWords: z.number().int().min(1).max(1000),
+  // absent ⇔ strict: the payload key is omitted at strict so benchmark
+  // transcripts (pinned by exact payload hash) keep replaying
+  groundingLevel: GroundingLevelSchema.optional(),
 });
 
 export const GenerateCoverLetterOutputSchema = z.object({
@@ -58,6 +62,10 @@ export function ensureGenerateCoverLetterRegistered() {
       const user = [
         `Output language: ${LANGUAGE_NAMES[input.outputLanguage]}`,
         `Tone: ${input.tone}`,
+        // strict adds nothing — strict prompts stay byte-identical to pre-feature ones
+        input.groundingLevel && input.groundingLevel !== "strict"
+          ? `Grounding level: ${input.groundingLevel} — ${GROUNDING_LEVEL_DIRECTIVES[input.groundingLevel]}`
+          : null,
         input.notes ? `User notes: ${input.notes}` : null,
         `Max words total: ${input.maxWords}`,
         "",

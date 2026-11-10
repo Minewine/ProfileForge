@@ -95,6 +95,7 @@ const settings = (over: Partial<GenerationSettings> = {}): GenerationSettings =>
   outputLanguage: "en",
   pageBudget: 1,
   tone: "professional",
+  groundingLevel: "strict",
   summaryMaxWords: 60,
   ...over,
 });
@@ -173,6 +174,16 @@ describe("buildLetterTaskPayload (tone + language + anti-repetition input)", () 
     expect(payload.cvBulletTexts).toEqual(["cv bullet text"]);
     expect(payload.maxWords).toBe(320);
     expect(payload.paragraphs.map((p) => p.angle)).toEqual(["motivation", "fit", "achievement"]);
+  });
+
+  it("carries groundingLevel when non-strict; strict omits the key (benchmark payload-hash stability)", () => {
+    const plan = buildLetterPlan({ snapshot: snapshotFixture(), report: reportFixture() });
+    const strict = buildLetterTaskPayload(plan, settings(), ["cv bullet text"]);
+    expect(strict).not.toHaveProperty("groundingLevel");
+    const polished = buildLetterTaskPayload(plan, settings({ groundingLevel: "polished" }), ["cv bullet text"]) as {
+      groundingLevel?: string;
+    };
+    expect(polished.groundingLevel).toBe("polished");
   });
 });
 

@@ -18,6 +18,7 @@ const settings: GenerationSettings = {
   outputLanguage: "en",
   pageBudget: 2,
   tone: "professional",
+  groundingLevel: "strict",
   summaryMaxWords: 60,
   templateId: "ats",
 };

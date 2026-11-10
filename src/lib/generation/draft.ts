@@ -165,6 +165,13 @@ export function buildTaskPayload(plan: CVPlan, settings: GenerationSettings) {
   return {
     outputLanguage: settings.outputLanguage,
     ...(settings.notes ? { notes: settings.notes } : {}),
+    // strict (the default) is omitted so the task payload stays byte-identical
+    // to pre-feature ones — benchmark transcripts are pinned by exact payload
+    // hash; the truthy guard also keeps an undefined level from embedding as
+    // null (stableStringify) and shifting the hash
+    ...(settings.groundingLevel && settings.groundingLevel !== "strict"
+      ? { groundingLevel: settings.groundingLevel }
+      : {}),
     plan: plan.items.map((i) => ({
       key: i.key,
       kind: i.kind,
@@ -275,6 +282,13 @@ export function buildLetterTaskPayload(
     outputLanguage: settings.outputLanguage,
     tone: settings.tone,
     ...(settings.notes ? { notes: settings.notes } : {}),
+    // strict (the default) is omitted so the task payload stays byte-identical
+    // to pre-feature ones — benchmark transcripts are pinned by exact payload
+    // hash; the truthy guard also keeps an undefined level from embedding as
+    // null (stableStringify) and shifting the hash
+    ...(settings.groundingLevel && settings.groundingLevel !== "strict"
+      ? { groundingLevel: settings.groundingLevel }
+      : {}),
     paragraphs: plan.items.map((i) => ({ key: i.key, angle: i.angle, evidenceText: i.sourceText })),
     cvBulletTexts,
     // role: null would fail the task's `z.string().optional()` schema — omit it

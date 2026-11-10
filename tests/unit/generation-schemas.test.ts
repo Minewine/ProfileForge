@@ -84,11 +84,12 @@ describe("GenerationSettings", () => {
     });
   });
 
-  it("resolves defaults: analysis language, budget 2, tone professional, summary 60 words", () => {
+  it("resolves defaults: analysis language, budget 2, tone professional, grounding strict, summary 60 words", () => {
     expect(resolveGenerationSettings({ kind: "cv", analysisLanguage: "fr" })).toEqual({
       outputLanguage: "fr",
       pageBudget: 2,
       tone: "professional",
+      groundingLevel: "strict",
       summaryMaxWords: 60,
       templateId: "ats",
     });
@@ -99,6 +100,40 @@ describe("GenerationSettings", () => {
     expect(
       resolveGenerationSettings({ kind: "cv", analysisLanguage: "fr", input: { outputLanguage: "en" } }),
     ).toMatchObject({ outputLanguage: "en" });
+  });
+
+  it("groundingLevel: input accepts the three levels only; resolver defaults to strict and passes explicit values through for both kinds", () => {
+    for (const level of ["strict", "polished", "embellished"] as const) {
+      expect(GenerationSettingsInputSchema.safeParse({ groundingLevel: level }).success).toBe(true);
+    }
+    for (const bad of ["wild", "STRICKT", 2, null]) {
+      expect(GenerationSettingsInputSchema.safeParse({ groundingLevel: bad }).success).toBe(false);
+      expect(GenerationSettingsSchema.safeParse({ ...validSettings, groundingLevel: bad }).success).toBe(false);
+    }
+
+    // absent input resolves to the default on both kinds
+    expect(resolveGenerationSettings({ kind: "cv", analysisLanguage: "en" })).toMatchObject({
+      groundingLevel: "strict",
+    });
+    expect(resolveGenerationSettings({ kind: "cover_letter", analysisLanguage: "fr" })).toMatchObject({
+      groundingLevel: "strict",
+    });
+    // explicit selection passes through on both kinds — no kind-gating
+    expect(
+      resolveGenerationSettings({ kind: "cv", analysisLanguage: "en", input: { groundingLevel: "polished" } }),
+    ).toMatchObject({ groundingLevel: "polished" });
+    expect(
+      resolveGenerationSettings({
+        kind: "cover_letter",
+        analysisLanguage: "en",
+        input: { groundingLevel: "embellished" },
+      }),
+    ).toMatchObject({ groundingLevel: "embellished" });
+
+    // the stored schema .default()s the key: legacy settings rows parse to "strict"
+    const legacy = GenerationSettingsSchema.safeParse({ ...validSettings, summaryMaxWords: 60 });
+    expect(legacy.success).toBe(true);
+    if (legacy.success) expect(legacy.data.groundingLevel).toBe("strict");
   });
 
   it("fixes the cover-letter page budget at 1 regardless of input", () => {

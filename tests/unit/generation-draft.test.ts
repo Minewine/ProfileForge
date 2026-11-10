@@ -171,7 +171,7 @@ describe("draftCV (LLM call)", () => {
       item({ key: "exp.e1.1", kind: "experience", entryId: "e1", sourceIds: ["b1"] }),
       item({ key: "cert.c1", kind: "certification", entryId: "c1", sourceIds: ["c1"] }),
     ]);
-    const settings: GenerationSettings = { outputLanguage: "fr", pageBudget: 2, tone: "professional", summaryMaxWords: 60, notes: "mette en avant Go" };
+    const settings: GenerationSettings = { outputLanguage: "fr", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60, notes: "mette en avant Go" };
     const checkCancelled = vi.fn().mockResolvedValue(undefined);
 
     const { content, warnings } = await draftCV({
@@ -212,7 +212,7 @@ describe("draftCV (LLM call)", () => {
     const { content } = await draftCV({
     userId: "u-test",
       plan,
-      settings: { outputLanguage: "en", pageBudget: 2, tone: "professional", summaryMaxWords: 60 },
+      settings: { outputLanguage: "en", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 },
       runId: "run-2",
       checkCancelled: vi.fn(),
     });
@@ -237,6 +237,7 @@ describe("task payload schema conformance (review regression)", () => {
       outputLanguage: "en",
       pageBudget: 2,
       tone: "professional",
+      groundingLevel: "strict",
       summaryMaxWords: 60,
     });
     expect(GenerateTailoredCVInputSchema.parse(payload)).toBeDefined();
@@ -256,7 +257,7 @@ describe("task payload schema conformance (review regression)", () => {
     };
     const payload = buildLetterTaskPayload(
       plan,
-      { outputLanguage: "en", pageBudget: 1, tone: "professional", summaryMaxWords: 60 },
+      { outputLanguage: "en", pageBudget: 1, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 },
       ["cv bullet"],
     );
     // The contract regression: a null role must be absent, not present as null.
@@ -273,6 +274,7 @@ describe("task payload schema conformance (review regression)", () => {
       outputLanguage: "en",
       pageBudget: 2,
       tone: "professional",
+      groundingLevel: "strict",
       summaryMaxWords: 60,
     }) as { jdDigest: { role?: string; company?: string } };
     expect(payload.jdDigest.role).toBe("Senior Backend Engineer");
@@ -285,6 +287,7 @@ describe("task payload schema conformance (review regression)", () => {
       outputLanguage: "en",
       pageBudget: 2,
       tone: "professional",
+      groundingLevel: "strict",
       summaryMaxWords: 60,
     }) as { jdDigest: { role?: string; company?: string } };
     expect(barePayload.jdDigest).not.toHaveProperty("role");
@@ -300,10 +303,40 @@ describe("task payload schema conformance (review regression)", () => {
       outputLanguage: "en",
       pageBudget: 2,
       tone: "professional",
+      groundingLevel: "strict",
       summaryMaxWords: 60,
     });
     expect(payload.jobDescription).toBe(plan.jdText);
     expect(GenerateTailoredCVInputSchema.parse(payload)).toBeDefined();
+  });
+});
+
+// Grounding dial: benchmark transcripts pin an exact hash of the task payload,
+// so strict (the default) must keep payloads byte-identical to pre-feature
+// ones — the key ships only when the user picks a non-strict level.
+describe("grounding level payload threading", () => {
+  const groundedPlan = () => planFixture([item({ key: "exp.e1.1", kind: "experience", entryId: "e1" })]);
+  const settings = (groundingLevel?: GenerationSettings["groundingLevel"]): GenerationSettings => ({
+    outputLanguage: "en",
+    pageBudget: 2,
+    tone: "professional",
+    groundingLevel: groundingLevel ?? "strict",
+    summaryMaxWords: 60,
+  });
+
+  it("strict payload has NO groundingLevel key and is otherwise unchanged", () => {
+    const payload = buildTaskPayload(groundedPlan(), settings());
+    expect(payload).not.toHaveProperty("groundingLevel");
+    expect(payload).toEqual(buildTaskPayload(groundedPlan(), settings("strict")));
+  });
+
+  it("polished/embellished payloads carry the level (still conforming to the real input schema)", async () => {
+    const { GenerateTailoredCVInputSchema } = await import("@/lib/llm/tasks/generatetailoredcv");
+    for (const level of ["polished", "embellished"] as const) {
+      const payload = buildTaskPayload(groundedPlan(), settings(level)) as { groundingLevel?: string };
+      expect(payload.groundingLevel).toBe(level);
+      expect(GenerateTailoredCVInputSchema.parse(payload)).toBeDefined();
+    }
   });
 });
 
@@ -373,7 +406,7 @@ describe("title rewriting (feature 005 US2)", () => {
       item({ key: "exp.e1.1", kind: "experience", entryId: "e1", sourceIds: ["b1"] }),
       item({ key: "expTitle.e1", kind: "title", entryId: "e1", sourceText: ["Platform Engineer"], sourceIds: ["e1"] }),
     ]);
-    const payload = buildTaskPayload(plan, { outputLanguage: "fr", pageBudget: 2, tone: "professional", summaryMaxWords: 60 });
+    const payload = buildTaskPayload(plan, { outputLanguage: "fr", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 });
     expect(GenerateTailoredCVInputSchema.parse(payload)).toBeDefined();
   });
 });
@@ -438,7 +471,7 @@ describe("summary synthesis payload (feature 005 US3)", () => {
   }
 
   it("two reports with different must-haves produce different summaryRequirements payloads (SC-005)", () => {
-    const settings: GenerationSettings = { outputLanguage: "en", pageBudget: 2, tone: "professional", summaryMaxWords: 60 };
+    const settings: GenerationSettings = { outputLanguage: "en", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 };
     const a = buildTaskPayload(planWithMustHaves(["Kubernetes", "Go"]), settings);
     const b = buildTaskPayload(planWithMustHaves(["Team leadership", "Kafka"]), settings);
     expect(a.summaryRequirements).toEqual(["Kubernetes", "Go"]);
@@ -448,7 +481,7 @@ describe("summary synthesis payload (feature 005 US3)", () => {
 
   it("summaryMaxWords threads into the payload (the bound the prompt enforces)", () => {
     const plan = planWithMustHaves(["Kubernetes"]);
-    const at90 = buildTaskPayload(plan, { outputLanguage: "en", pageBudget: 2, tone: "professional", summaryMaxWords: 90 });
+    const at90 = buildTaskPayload(plan, { outputLanguage: "en", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 90 });
     expect(at90.summaryMaxWords).toBe(90);
   });
 
@@ -459,6 +492,7 @@ describe("summary synthesis payload (feature 005 US3)", () => {
       outputLanguage: "en",
       pageBudget: 2,
       tone: "professional",
+      groundingLevel: "strict",
       summaryMaxWords: 45,
     });
     expect(GenerateTailoredCVInputSchema.parse(payload)).toBeDefined();

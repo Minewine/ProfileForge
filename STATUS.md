@@ -33,6 +33,14 @@ horizontal scaling.
 
 ## 2. Recent changes (2026-11-02 pass)
 
+- **2026-11-08 — Grounding dial (uncommitted working tree).** New generation-time setting
+  `groundingLevel: strict | polished | embellished` (default `strict`, both document kinds,
+  chosen in the generation panel with a per-level explanation). The dial changes only the
+  prompt directives: strict renders byte-identical LLM payloads/prompts (keyless benchmark
+  unaffected — no transcript re-record); numbers, dates, names, and technologies stay
+  evidence-locked at every level and the deterministic grounding check is unchanged.
+  Directives live in `src/lib/llm/prompts/groundingLevels.ts`; the prompts README rule was
+  amended, so the benchmark baseline was re-pinned offline via keyless `--update-baseline`.
 - **CI fixed.** Runs were failing at typecheck because `src/generated/` (Prisma client) is
   gitignored and CI never generated it. `npm ci` now triggers `prisma generate` via a
   package.json `postinstall` hook. The benchmark model mapping moved from an inline literal

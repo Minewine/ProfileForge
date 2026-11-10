@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { OutputLanguageSchema } from "@/lib/generation/schemas";
+import { GroundingLevelSchema, OutputLanguageSchema } from "@/lib/generation/schemas";
 import { registerTask, type ChatMessage } from "@/lib/llm/router";
+import { GROUNDING_LEVEL_DIRECTIVES } from "@/lib/llm/prompts/groundingLevels";
 import { loadSystemPrompt } from "@/lib/llm/prompts/load";
 
 export const PLAN_ITEM_KINDS = ["experience", "project", "education", "certification", "title"] as const;
@@ -26,6 +27,9 @@ export const GenerateTailoredCVInputSchema = z.object({
   /** Capped raw job-description text — the primary wording target. */
   jobDescription: z.string().min(1).optional(),
   pageBudget: z.number().int().min(1).max(3),
+  // absent ⇔ strict: the payload key is omitted at strict so benchmark
+  // transcripts (pinned by exact payload hash) keep replaying
+  groundingLevel: GroundingLevelSchema.optional(),
 });
 
 export const GenerateTailoredCVOutputSchema = z.object({
@@ -64,6 +68,10 @@ export function ensureGenerateTailoredCVRegistered() {
         `Output language: ${LANGUAGE_NAMES[input.outputLanguage]}`,
         input.notes ? `User notes: ${input.notes}` : null,
         `Page budget: ${input.pageBudget} page(s)`,
+        // strict adds nothing — strict prompts stay byte-identical to pre-feature ones
+        input.groundingLevel && input.groundingLevel !== "strict"
+          ? `Grounding level: ${input.groundingLevel} — ${GROUNDING_LEVEL_DIRECTIVES[input.groundingLevel]}`
+          : null,
         "",
         "Plan items (rewrite each under its key):",
         items,

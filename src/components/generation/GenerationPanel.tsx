@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { OmissionsList } from "@/components/generation/OmissionsList";
 import { SelectionView, type SelectionRecordView } from "@/components/generation/SelectionView";
-import { describeError, FLAG_EXPLANATIONS, type DescribedError } from "@/lib/client-messages";
+import { describeError, FLAG_EXPLANATIONS, GROUNDING_LEVEL_EXPLANATIONS, type DescribedError } from "@/lib/client-messages";
 import { apiUrl } from "@/lib/base-path";
 
 // Local view types over the API payloads (importing lib schemas would pull
@@ -45,6 +45,10 @@ type LetterContentView = {
   tone: string;
   omissions: OmissionView[];
 };
+
+/** Grounding dial (mirrors GroundingLevelSchema inline — lib schemas stay out
+ *  of the client bundle). */
+type GroundingLevelView = "strict" | "polished" | "embellished";
 
 type ContentView = CVContentView | LetterContentView;
 
@@ -187,6 +191,7 @@ export function GenerationPanel({
   const [summaryMaxWords, setSummaryMaxWords] = useState(60); // feature 005 US3: 30..120, default 60
   const [templateId, setTemplateId] = useState<"ats" | "designed">("ats"); // phase 8: ATS stays the default
   const [tone, setTone] = useState("professional");
+  const [grounding, setGrounding] = useState<GroundingLevelView>("strict"); // how much the AI may embellish
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DescribedError | null>(null);
@@ -274,6 +279,7 @@ export function GenerationPanel({
           kind: selectedKind,
           settings: {
             outputLanguage,
+            groundingLevel: grounding, // both kinds — no kind-gating
             ...(selectedKind === "cover_letter" ? { tone } : {}),
             ...(selectedKind === "cv" ? { pageBudget, summaryMaxWords, templateId } : {}),
             ...(notes.trim() ? { notes: notes.trim() } : {}),
@@ -446,6 +452,26 @@ export function GenerationPanel({
               <option value="enthusiastic">Enthusiastic</option>
               <option value="formal">Formal</option>
             </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="gen-grounding">Grounding level</Label>
+            <Select
+              id="gen-grounding"
+              data-testid="gen-grounding"
+              value={grounding}
+              onChange={(e) =>
+                setGrounding(e.target.value === "polished" ? "polished" : e.target.value === "embellished" ? "embellished" : "strict")
+              }
+              disabled={busy || active}
+              title={IN_PROGRESS_TITLE}
+            >
+              <option value="strict">Strict — evidence only</option>
+              <option value="polished">Polished — stronger wording</option>
+              <option value="embellished">Embellished — qualitative color</option>
+            </Select>
+            <p className="text-xs text-neutral-500" data-testid="gen-grounding-explanation">
+              {GROUNDING_LEVEL_EXPLANATIONS[grounding]}
+            </p>
           </div>
           <div className="space-y-1">
             <Label htmlFor="gen-summary-words">Summary length (CV)</Label>

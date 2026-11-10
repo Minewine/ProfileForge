@@ -114,7 +114,13 @@ function scenario(e2Bullets: number) {
       content,
       plan,
       snapshot,
-      settings: { outputLanguage: "fr", pageBudget, tone: "professional", summaryMaxWords: 60 } satisfies GenerationSettings,
+      settings: {
+        outputLanguage: "fr",
+        pageBudget,
+        tone: "professional",
+        groundingLevel: "strict",
+        summaryMaxWords: 60,
+      } satisfies GenerationSettings,
     });
   return { snapshot, planFor, fit };
 }
@@ -184,7 +190,7 @@ describe("fitCVToBudget", () => {
         content,
         plan,
         snapshot,
-        settings: { outputLanguage: "fr", pageBudget: 1, tone: "professional", summaryMaxWords: 60 },
+        settings: { outputLanguage: "fr", pageBudget: 1, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 },
       }),
     ).rejects.toMatchObject({ code: "PAGE_BUDGET_CONFLICT" });
   });
@@ -197,7 +203,7 @@ describe("fitCVToBudget", () => {
       content,
       plan,
       snapshot,
-      settings: { outputLanguage: "fr", pageBudget: 2, tone: "professional", summaryMaxWords: 60 },
+      settings: { outputLanguage: "fr", pageBudget: 2, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 },
     });
 
     expect(outcome.content.omissions).toEqual([]); // present but empty — no hidden truncation
@@ -222,7 +228,7 @@ describe("fitCVToBudget", () => {
       content,
       plan,
       snapshot,
-      settings: { outputLanguage: "fr", pageBudget: 1, tone: "professional", summaryMaxWords: 60 },
+      settings: { outputLanguage: "fr", pageBudget: 1, tone: "professional", groundingLevel: "strict", summaryMaxWords: 60 },
     });
 
     expect(outcome.pageCount).toBeLessThanOrEqual(1);

@@ -12,6 +12,11 @@ export type OutputLanguage = z.infer<typeof OutputLanguageSchema>;
 export const ToneSchema = z.enum(["professional", "enthusiastic", "formal"]);
 export type Tone = z.infer<typeof ToneSchema>;
 
+/** How much embellishment the LLM may apply when drafting (prompt directives
+ *  only — the deterministic grounding check is mode-independent). */
+export const GroundingLevelSchema = z.enum(["strict", "polished", "embellished"]);
+export type GroundingLevel = z.infer<typeof GroundingLevelSchema>;
+
 /** CV render templates (phase 8): "ats" single-column (the default) or
  *  "designed" two-column. Letters always render "ats". */
 export const CVTemplateIdSchema = z.enum(["ats", "designed"]);
@@ -22,12 +27,14 @@ export const DEFAULT_CV_PAGE_BUDGET = 2;
 export const LETTER_PAGE_BUDGET = 1;
 export const MAX_NOTES_CHARS = 2000;
 export const DEFAULT_SUMMARY_MAX_WORDS = 60;
+export const DEFAULT_GROUNDING_LEVEL = "strict";
 
 /** What the API accepts (all optional; defaults resolved against the analysis). */
 export const GenerationSettingsInputSchema = z.object({
   outputLanguage: OutputLanguageSchema.optional(),
   pageBudget: z.number().int().min(1).max(3).optional(),
   tone: ToneSchema.optional(),
+  groundingLevel: GroundingLevelSchema.optional(), // both kinds — no kind-gating
   notes: z.string().max(MAX_NOTES_CHARS).optional(),
   summaryMaxWords: z.number().int().min(30).max(120).optional(),
   templateId: CVTemplateIdSchema.optional(), // phase 8: render template (cv only)
@@ -39,6 +46,7 @@ export const GenerationSettingsSchema = z.object({
   outputLanguage: OutputLanguageSchema, // default: analysis.language (the JD's detected language)
   pageBudget: z.number().int().min(1).max(3), // default 2 (cv); cover_letter fixed at 1
   tone: ToneSchema.default("professional"),
+  groundingLevel: GroundingLevelSchema.default(DEFAULT_GROUNDING_LEVEL), // .default() keeps legacy stored rows parseable (tone precedent)
   notes: z.string().max(MAX_NOTES_CHARS).optional(),
   summaryMaxWords: z.number().int().min(30).max(120).default(DEFAULT_SUMMARY_MAX_WORDS), // summary length bound (feature 005)
   templateId: CVTemplateIdSchema.optional(), // absent on pre-phase-8 rows ⇒ "ats" at render time
@@ -56,7 +64,8 @@ export type GenerationCreateInput = z.infer<typeof GenerationCreateSchema>;
 /**
  * Resolve user input into the frozen settings: outputLanguage defaults to the
  * analysis language, cv budget to 2, letter budget fixed at 1, tone to
- * "professional", summary length to 60 words (30..120).
+ * "professional", grounding level to "strict" (both kinds), summary length to
+ * 60 words (30..120).
  */
 export function resolveGenerationSettings(args: {
   kind: GenerationKind;
@@ -68,6 +77,7 @@ export function resolveGenerationSettings(args: {
     pageBudget:
       args.kind === "cover_letter" ? LETTER_PAGE_BUDGET : (args.input?.pageBudget ?? DEFAULT_CV_PAGE_BUDGET),
     tone: args.input?.tone ?? "professional",
+    groundingLevel: args.input?.groundingLevel ?? DEFAULT_GROUNDING_LEVEL,
     summaryMaxWords: args.input?.summaryMaxWords ?? DEFAULT_SUMMARY_MAX_WORDS,
     templateId: args.kind === "cv" ? (args.input?.templateId ?? DEFAULT_CV_TEMPLATE_ID) : DEFAULT_CV_TEMPLATE_ID,
     ...(args.input?.notes !== undefined ? { notes: args.input.notes } : {}),

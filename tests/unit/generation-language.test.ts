@@ -118,6 +118,7 @@ const SETTINGS = (outputLanguage: "fr" | "en"): GenerationSettings => ({
   outputLanguage,
   pageBudget: 2,
   tone: "professional",
+  groundingLevel: "strict",
   summaryMaxWords: 60,
 });
 

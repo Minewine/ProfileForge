@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { GroundingLevelSchema } from "@/lib/generation/schemas";
 import {
   describeError,
   FLAG_EXPLANATIONS,
+  GROUNDING_LEVEL_EXPLANATIONS,
   LLM_ERROR_GUIDANCE,
 } from "@/lib/client-messages";
 
@@ -55,6 +57,21 @@ describe("FLAG_EXPLANATIONS", () => {
     }
     expect(FLAG_EXPLANATIONS.VERBATIM_FALLBACK).toMatch(/original/i);
     expect(FLAG_EXPLANATIONS.UNCERTAIN_TRANSLATION).toMatch(/double-check/i);
+  });
+});
+
+describe("GROUNDING_LEVEL_EXPLANATIONS", () => {
+  it("covers exactly the GroundingLevelSchema values (the map inlines the union — client-messages stays zero-import)", () => {
+    expect(Object.keys(GROUNDING_LEVEL_EXPLANATIONS).sort()).toEqual([...GroundingLevelSchema.options].sort());
+  });
+
+  it("every explanation is a single non-empty sentence; polished/embellished mention the warnings path", () => {
+    for (const [level, text] of Object.entries(GROUNDING_LEVEL_EXPLANATIONS)) {
+      expect(text.trim().length, level).toBeGreaterThan(10);
+      expect((text.match(/\./g) ?? []).length, level).toBeLessThanOrEqual(1);
+    }
+    expect(GROUNDING_LEVEL_EXPLANATIONS.polished).toMatch(/warning/i);
+    expect(GROUNDING_LEVEL_EXPLANATIONS.embellished).toMatch(/warning/i);
   });
 });
 

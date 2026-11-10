@@ -86,9 +86,53 @@ execute multi-statement batches — do not paste SQL there.)
 
 ## Redeploy
 
+### SFTP-only (no cPanel clicks; tested 2026-11-10)
+
+The account has SFTP but no shell (`ssh` prints "Shell access is not enabled"),
+so a redeploy can skip the tarball and cPanel File Manager entirely. From the
+build machine, with `~/.ssh/config` containing `Host rametric`:
+
+    NEXT_BASE_PATH=/profile-forge npm run build   # clean tree at the commit to ship
+    B=.next/standalone && rm -rf /tmp/pf-up && mkdir /tmp/pf-up
+    cp -r $B/.next /tmp/pf-up/.next && cp -r .next/static /tmp/pf-up/.next/static
+    cp -r public /tmp/pf-up/public && cp $B/server.js /tmp/pf-up/
+    : > /tmp/restart.txt
+    sftp rametric   # then issue the puts below
+
+Inside sftp (batchable via `sftp -b file rametric`):
+
+    cd profile-forge/.next
+    lcd /tmp/pf-up/.next
+    put -r static
+    put -r node_modules
+    put -r server
+    put BUILD_ID
+    put app-path-routes-manifest.json
+    put build-manifest.json
+    put package.json
+    put prerender-manifest.json
+    put required-server-files.json
+    put routes-manifest.json
+    cd ..
+    lcd /tmp/pf-up
+    put server.js
+    put /tmp/restart.txt tmp/restart.txt
+
+`put -r` merges into existing remote dirs (it never deletes). `uploads/`,
+`.appsecret`, `bootstrap.js` and `schema.sql` on the server are untouched.
+Uploading `tmp/restart.txt` is what restarts Passenger — do it last. Then
+remove chunks the new build no longer references (diff remote
+`.next/static/chunks` against the local one) and delete any old bundle tar.
+
+### Full bundle (first install, or after a dependency change)
+
 Rebuild the bundle the same way and Extract over `~/profile-forge` (keeps
 `uploads/` and `.appsecret` if present), then cPanel → Restart. `uploads/` and
 `.appsecret` are runtime files — never delete them on redeploy.
+
+Skipping `npm ci` in a worktree (as the SFTP path above does) is safe only when
+`package-lock.json` is unchanged since the last full upload — otherwise the
+shipped `node_modules` won't match and the full-bundle path is required.
 
 ## Security notes
 

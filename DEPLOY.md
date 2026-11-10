@@ -38,8 +38,9 @@ Environment variables (set in cPanel → Setup Node.js App → env vars):
    Note the generated names (`ramemvpl_*`).
 2. **Node app**: cPanel → Setup Node.js App → Create:
    Node 20 · app root `profile-forge` · app URL `profile-forge` · startup file
-   `bootstrap.js` (runs migrations, then boots the server). Then add the env
-   vars above — no npm install needed, `node_modules` ships prebuilt.
+   `bootstrap.js` (creates the schema via `pg` if absent, then boots the
+   server). Then add the env vars above — no npm install needed,
+   `node_modules` ships prebuilt.
 3. **Remote DB access** (optional): cPanel → Remote PostgreSQL → add the build
    machine's IP. **On this host the page is disabled** — apply migrations via
    phpPgAdmin instead (see "Migrations & demo seed").
@@ -53,26 +54,29 @@ cd ../pf-deploy && npm ci                # postinstall runs prisma generate
 NEXT_BASE_PATH=/profile-forge npm run build
 cd .next/standalone
 cp -r ../../public . && cp -r ../../.next/static .next/static
-cp -r ../../prisma .                     # schema + migrations for bootstrap
-mkdir -p node_modules/@prisma
-cp -r ../../node_modules/prisma node_modules/
-cp -r ../../node_modules/@prisma/engines node_modules/@prisma/
-# add bundle-only files: bootstrap.js (Passenger startup: migrate deploy then
-# require ./server.js) and prisma.config.js (env-driven, no dotenv)
+# add bundle-only files: bootstrap.js (Passenger startup) and schema.sql
 tar czf ../../profileforge-bundle.tar.gz .
 ```
 
-Upload the single `.tar.gz` (SFTP), then cPanel File Manager → `~/profile-forge`
-→ Extract. Migrations apply automatically on the first Passenger start (and on
-every restart — `migrate deploy` is idempotent), so no manual SQL, no phpPgAdmin.
+Upload the `.tar.gz` via SFTP, then cPanel File Manager → `~/profile-forge` →
+Extract. On first start `bootstrap.js` probes `public."User"`; on an empty
+database it applies `schema.sql` through the `pg` driver (multi-statement
+simple-query protocol), then boots. Restarts skip straight to boot.
 
 ## Migrations & demo seed
 
-**Automatic.** The bundle ships the Prisma CLI + engines + `prisma/migrations`;
-the Passenger startup file (`bootstrap.js`) runs `prisma migrate deploy` before
-booting the server. Future schema changes = commit migrations, rebuild bundle,
-re-extract, restart. (phpPgAdmin's SQL tab on this host cannot execute
-multi-statement batches — do not paste SQL there.)
+`bootstrap.js` applies `schema.sql` **only to an empty database** (probed via
+`to_regclass('public."User"')`). Regenerate it after schema changes with
+`npx prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script`
+(strip `--` comment lines — phpPgAdmin and naive parsers choke on them).
+
+Known limitation for future *incremental* migrations: the empty-DB probe skips
+the file once tables exist. For a schema change, replace the probe with a
+version marker (or apply the diff SQL by hand). The Prisma CLI path was tried
+and abandoned: the CLI's dependency closure is ~256 MB (Studio, d3, drivers…)
+and `@prisma/config` is not bundled in the CLI build, so shipping the CLI to a
+no-shell host is not worth it. (phpPgAdmin's SQL tab on this host also cannot
+execute multi-statement batches — do not paste SQL there.)
 
 ## Verify
 
